@@ -926,3 +926,136 @@ Credenciais movidas de 6 `define()` hardcoded em `enviarMensagemAcao.php` para `
 - [ ] Tentar exclusão sem CSRF via POST direto → esperar 403
 - [ ] Confirmar polling de 60s continua atualizando lista sem erros
 - [ ] Confirmar que `config/smtp.php` não aparece no `git status`
+
+---
+
+## Fase 3A Executada — 2026-05-22
+
+### Bug crítico corrigido
+
+`#resposta` ausente em `mensagemRecebida.php` e `mensagemEnviada.php` — jQuery UI Dialog de exclusão nunca aparecia. Corrigido adicionando `<div id="resposta"></div>` antes do `<fieldset>` em ambas as páginas.
+
+### Arquivos PHP alterados (9)
+
+| Arquivo | Mudança |
+|---|---|
+| `mensagem/dados/dadosResponderMsg.php` | `declare(strict_types=1)`, `isset()` + `trim()` em todos os `$_POST` |
+| `mensagem/mensagemRecebida.php` | Adicionado `<div id="resposta">` (bug fix), `aria-live` e `aria-label` em `#lista` |
+| `mensagem/mensagemEnviada.php` | Mesmo padrão |
+| `mensagem/enviarMensagem.php` | Checkboxes agora envolvidos em `<label class="dest-item">` (acessibilidade), `type="button"` e `aria-label` no botão, `alt` em imagem |
+| `mensagem/responderMensagem.php` | Checkboxes com `aria-label`, removido `cols="70"`, `type="button"` e `aria-label` no botão, `alt` em imagem |
+| `mensagem/lerMsgRecebida.php` | `readonly="true"` → `readonly`, removido `cols`, `aria-label` nos botões, `alt` nas imagens, `for="msg"` no label |
+| `mensagem/lerMsgEnv.php` | Mesmo padrão, removido `<label>Voltar</label>` redundante (botão já tem `aria-label`) |
+| `mensagem/listarMensagemRecebidaAcao.php` | Removido `<script>` inline de zebra/dimensões (movido para CSS) |
+| `mensagem/listarMensagemEnviadaAcao.php` | Mesmo |
+
+### Arquivos CSS alterados (3)
+
+| Arquivo | Mudança |
+|---|---|
+| `mensagem/css/enviarMensagem.css` | Removida duplicação `overflow: scroll`, `max-width` responsivo em todos inputs/textarea, `.dest-item` para checkboxes clicáveis, `:focus-visible` + `:focus` outline laranja, `button:disabled` estilo |
+| `mensagem/css/lerMsg.css` | Responsivo full-width em `.divFor`, `.divAssunto`, `textarea`, `input[readonly]` fundo suave, `button:disabled`, `justify-content: flex-start` em `.divVoltar` |
+| `mensagem/css/mensagemEnviada.css` | `#lista { overflow-x: auto }` (scroll horizontal em mobile), `#listar_mensagem { min-width: 500px }`, **zebra striping via CSS `nth-child(odd)`** (substitui inline script AJAX), `.msg-carregando`, `button:disabled` |
+
+### Arquivos JS alterados (5)
+
+| Arquivo | Mudança |
+|---|---|
+| `mensagem/js/mensagemRecebida.js` | Loading state no `carregarLista()`, `DOMPurify.sanitize()` no `.html()`, `.text()` no dialog de exclusão, `button:disabled` durante DELETE, `.fail()` handler, `encodeURIComponent` nos IDs de URL |
+| `mensagem/js/mensagemEnviada.js` | Mesmo padrão, redirect para `mensagemEnviada` após exclusão |
+| `mensagem/js/enviarMensagem.js` | `button:disabled` durante POST, `btnOriginal` restaurado em `.fail()`, `.text()` no dialog de sucesso/erro, `.fail()` handler, trim() na validação |
+| `mensagem/js/responderMsg.js` | Mesmo padrão, redirect para `mensagemRecebida` após envio |
+| `mensagem/js/lerMsgRec.js` | `button:disabled` no clique de Responder (previne duplo submit) |
+
+### php -l
+
+9/9 PHP sem erros de sintaxe.
+
+### Testes manuais pendentes (Fase 3A)
+
+- [ ] Abrir caixa de entrada — verificar loading "Carregando mensagens..." aparece brevemente
+- [ ] Verificar zebra striping na tabela (via CSS, não mais JS inline)
+- [ ] Verificar scroll horizontal da tabela em viewport < 500px
+- [ ] Clicar em checkbox de destinatário — label inteiro deve ser clicável
+- [ ] Enviar mensagem — botão deve ficar desabilitado durante envio
+- [ ] Tentar enviar duas vezes em sequência rápida — segundo clique deve ser bloqueado
+- [ ] Excluir mensagem recebida — dialog deve aparecer (bug fix)
+- [ ] Excluir mensagem enviada — dialog deve aparecer (bug fix)
+- [ ] Responder mensagem — botão deve ficar desabilitado ao clicar
+- [ ] Verificar foco visível com Tab em inputs, textarea e botões
+- [ ] Navegar com leitor de tela (NVDA/VoiceOver) nos botões das listagens
+
+### Pendências para Fase 3B
+
+- Unificar `enviarMensagem.js` e `responderMsg.js` (lógica idêntica, redirect diferente)
+- Remover arquivos de backup (`lerMsgRecebida copy.php`, `responderMensagem copy.php`)
+- Estados de vazio mais visuais (ícone + texto formatado)
+- Validação de tamanho máximo de assunto/mensagem
+- Confirmar exclusão com dialog antes de chamar o endpoint (UX de segurança)
+
+---
+
+## Fase 3B Executada — 2026-05-22
+
+### Backups removidos
+
+| Arquivo | Ação |
+|---|---|
+| `mensagem/lerMsgRecebida copy.php` | `git rm` — rastreado no git, sem referências em código |
+| `mensagem/responderMensagem copy.php` | `git rm` — idem |
+
+### Arquivos PHP alterados (4)
+
+| Arquivo | Mudança |
+|---|---|
+| `mensagem/enviarMensagem.php` | Removido `cols="70"` do textarea, adicionado `data-redirect` ao botão `#enviar` |
+| `mensagem/responderMensagem.php` | Script src trocado: `responderMsg.js` → `enviarMensagem.js`, `data-redirect` ao botão |
+| `mensagem/listarMensagemRecebidaAcao.php` | Estado vazio: `<div class="msg-vazio">` com ícone e texto |
+| `mensagem/listarMensagemEnviadaAcao.php` | Mesmo padrão |
+
+### CSS alterado (1)
+
+| Arquivo | Mudança |
+|---|---|
+| `mensagem/css/mensagemEnviada.css` | Adicionado `.msg-vazio` (flex, gap, padding, cor) e `.msg-vazio p` |
+
+### JS alterados (4)
+
+| Arquivo | Mudança |
+|---|---|
+| `mensagem/js/enviarMensagem.js` | Lê `data-redirect` de `$btnEnviar.data('redirect')` — unifica lógica de envio e resposta |
+| `mensagem/js/responderMsg.js` | Esvaziado com comentário de deprecação — substituído por `enviarMensagem.js` |
+| `mensagem/js/mensagemRecebida.js` | Confirmação jQuery UI Dialog antes de excluir, função `excluirMensagem()` separada |
+| `mensagem/js/mensagemEnviada.js` | Mesmo padrão |
+
+### JS unificado: sim
+
+`enviarMensagem.js` agora serve ambos os fluxos via `data-redirect` no botão `#enviar`. O redirect URL é determinado pelo PHP de cada página, sem lógica no JS. `responderMsg.js` mantido como stub por compatibilidade de cache de navegador.
+
+### Confirmação de exclusão
+
+Fluxo:
+1. Usuário clica no botão excluir
+2. Dialog jQuery UI aparece: _"Deseja realmente excluir esta mensagem? Esta ação não poderá ser desfeita."_
+3. Botões: **Excluir** (chama AJAX com CSRF) | **Cancelar** (fecha dialog, nada acontece)
+4. CSRF continua sendo enviado no POST de exclusão ✓
+5. Botão `#excluir` fica desabilitado durante a requisição ✓
+
+### php -l
+
+4/4 PHP sem erros de sintaxe.
+
+### Testes manuais pendentes (Fase 3B)
+
+- [ ] Clicar em excluir — dialog de confirmação deve aparecer antes do AJAX
+- [ ] Clicar em "Cancelar" — mensagem deve permanecer na lista
+- [ ] Clicar em "Excluir" — mensagem deve ser removida com feedback
+- [ ] Enviar mensagem (enviarMensagem.php) — redireciona para `enviarMensagem` ✓
+- [ ] Responder mensagem (responderMensagem.php) — redireciona para `mensagemRecebida` ✓
+- [ ] Estado vazio da caixa de entrada (sem mensagens) — verificar visual `.msg-vazio`
+- [ ] Estado vazio da caixa de enviadas — idem
+- [ ] Confirmar que `responderMsg.js` vazio não afeta comportamento (responderMensagem.php usa enviarMensagem.js)
+
+### Próxima fase recomendada
+
+**Fase 4 (banco de dados):** Migração para InnoDB, índices, utf8mb4, avaliação de exclusão lógica. Pré-requisito: testes manuais das Fases 1–3B validados em ambiente de produção.
