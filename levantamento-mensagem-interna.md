@@ -1059,3 +1059,248 @@ Fluxo:
 ### Próxima fase recomendada
 
 **Fase 4 (banco de dados):** Migração para InnoDB, índices, utf8mb4, avaliação de exclusão lógica. Pré-requisito: testes manuais das Fases 1–3B validados em ambiente de produção.
+
+---
+
+## Fase 4A Planejada — 2026-05-22
+
+### Diagnóstico do banco (leitura realizada, nenhuma alteração aplicada)
+
+#### Tabela `mensagem`
+
+| Campo | Tipo | Observação |
+|---|---|---|
+| `idMensagemRec` | INT NOT NULL AUTO_INCREMENT | PK, AUTO_INCREMENT atual: 1031 |
+| `remetenteRec` | INT NOT NULL | FK implícita para `cadastroministro.rm` |
+| `destinatarioRec` | INT NOT NULL | FK implícita para `cadastroministro.rm` |
+| `assuntoRec` | VARCHAR(255) utf8mb3_bin | utf8mb3 — sem emojis; _bin é case-sensitive |
+| `textoRec` | TEXT utf8mb3_bin | idem |
+| `enviadaEm` | DATETIME NOT NULL | data de envio |
+| `recebidaEm` | DATETIME NULL | preenchida quando lida — 705/778 não nulos |
+| `status` | INT NOT NULL | 0=não lida, 1=lida |
+
+**Engine:** MyISAM | **Charset:** utf8mb3_bin | **Linhas:** 778 | **Índices:** apenas PK
+
+#### Tabela `mensagemenviada`
+
+Estrutura espelhada. **676 linhas**, AUTO_INCREMENT 1031 (mesmo que `mensagem`).
+
+Diferença de 102 linhas entre as tabelas: cada mensagem enviada a N destinatários gera 1 linha em `mensagemenviada` e N linhas em `mensagem`.
+
+#### Tabelas relacionadas
+
+| Tabela | Engine | Charset |
+|---|---|---|
+| `cadastroministro` | InnoDB | utf8mb4_general_ci |
+| `login` | InnoDB | utf8mb4_general_ci |
+
+`mensagem` e `mensagemenviada` são as únicas tabelas do módulo ainda em MyISAM + utf8mb3.
+
+### Problemas confirmados
+
+| # | Problema | Risco |
+|---|---|---|
+| 1 | Engine MyISAM — sem transações | **ALTO** — dois INSERTs em enviarMensagemAcao não são atômicos |
+| 2 | utf8mb3_bin — sem emojis, collation binária | MÉDIO — incompatível com demais tabelas |
+| 3 | Sem índices além do PK | **ALTO** — full-table-scan em todas as listagens |
+| 4 | Sem exclusão lógica — DELETE físico | MÉDIO — dados irrecuperáveis após exclusão |
+| 5 | Campo `status INT` — desperdício de bytes | BAIXO — poderia ser TINYINT |
+| 6 | Sem FK para `cadastroministro.rm` | BAIXO — sem integridade referencial |
+
+### SQL de proposta criado
+
+**Arquivo:** `docs/sql/mensagem-fase-4a-proposta.sql`
+
+Contém:
+- Queries de verificação pré-migração (somente leitura)
+- Etapa 1: backup obrigatório (instrução mysqldump)
+- Etapa 2: `ALTER TABLE ... ENGINE = InnoDB`
+- Etapa 3: `ALTER TABLE ... CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+- Etapa 4: criação de 5 índices
+- Etapa 5 (opcional): adição de colunas `excluidaEm`, `arquivadaEm`, `atualizadoEm`
+- Etapa 6 (opcional): chaves estrangeiras (só se queries de órfãos retornarem 0)
+- Queries de verificação pós-migração
+- Rollback completo (ordem inversa)
+
+### Índices propostos
+
+| Índice | Tabela | Colunas | Motivo |
+|---|---|---|---|
+| `idx_msg_dest_data` | mensagem | (destinatarioRec, enviadaEm) | caixa de entrada ordenada |
+| `idx_msg_dest_status` | mensagem | (destinatarioRec, status) | filtro de não lidas |
+| `idx_msg_remetente_data` | mensagem | (remetenteRec, enviadaEm) | auditoria/busca por remetente |
+| `idx_env_remetente_data` | mensagemenviada | (remetenteEnv, enviadaEm) | caixa de saída ordenada |
+| `idx_env_dest_data` | mensagemenviada | (destinatarioEnv, enviadaEm) | busca por destinatário |
+| `idx_msg_dest_ativo` | mensagem | (destinatarioRec, excluidaEm, enviadaEm) | filtragem pós-exclusão lógica |
+| `idx_env_rem_ativo` | mensagemenviada | (remetenteEnv, excluidaEm, enviadaEm) | idem |
+
+### Campos propostos (novos)
+
+| Campo | Tipo | Padrão | Motivo |
+|---|---|---|---|
+| `excluidaEm` | DATETIME NULL | NULL | NULL = ativa; preenchida = excluída logicamente |
+| `arquivadaEm` | DATETIME NULL | NULL | arquivamento por destinatário |
+| `atualizadoEm` | TIMESTAMP | CURRENT_TIMESTAMP ON UPDATE | auditoria automática |
+
+**`lidaEm` não proposto:** `recebidaEm` já existe e já está sendo usado com 705/778 registros preenchidos.
+
+### Avaliação: unificação de mensagem + mensagemenviada
+
+**Decisão: não unificar na Fase 4A.**
+
+Razões:
+- Diferença de 102 linhas entre tabelas indica semântica diferente (1 linha por remetente vs N linhas por destinatário)
+- Migração de dados requer script testado + validação linha a linha
+- Não altera funcionalidade da Fase 4A (índices/InnoDB)
+- Unificação planejada para Fase 4B com nova estrutura: `mensagens` + `mensagem_destinatarios`
+
+### Riscos
+
+| Risco | Probabilidade | Impacto | Mitigação |
+|---|---|---|---|
+| Dados corrompidos na conversão de charset | Baixa | Alto | Backup verificado antes |
+| Downtime durante ALTER TABLE (table lock) | Garantida | Baixo | ~1-2s para 778 linhas — fazer fora do horário |
+| Comportamento de comparação diferente após utf8mb3_bin → utf8mb4_unicode_ci | Baixa | Baixo | Nenhuma query PHP compara assuntoRec/textoRec em WHERE |
+| FK falha por órfãos | A verificar | Médio | Executar query de verificação de órfãos antes da Etapa 6 |
+
+### Ordem segura de execução futura
+
+```
+1. Fazer backup (mysqldump)
+2. Verificar backup (contagem de linhas)
+3. Executar em staging primeiro
+4. Janela: fora do horário de uso
+5. Etapa 2: ALTER ENGINE = InnoDB (ambas as tabelas)
+6. Verificar Engine
+7. Etapa 3: CONVERT TO utf8mb4 (ambas)
+8. Verificar Collation
+9. Etapa 4: CREATE INDEX (5 índices)
+10. Verificar EXPLAIN nas queries principais
+11. Etapa 5 (opcional): ADD COLUMN excluidaEm/arquivadaEm/atualizadoEm
+12. Etapa 6 (opcional): FKs — só se verificação de órfãos retornar 0
+13. Testes funcionais completos
+```
+
+### Checklist de backup pré-execução
+
+- [ ] `mysqldump -u [user] -p [banco] mensagem mensagemenviada > backup_$(date +%Y%m%d).sql`
+- [ ] Verificar tamanho do arquivo de backup (> 0 bytes)
+- [ ] Contar linhas no dump: `grep 'INSERT INTO' backup.sql | wc -l`
+- [ ] Testar restauração em ambiente separado
+- [x] `mensagem` tem 779 linhas e `mensagemenviada` tem 676 — confirmado
+- [x] AUTO_INCREMENT atual de ambas: 1031
+- [x] Backup salvo em `C:/Users/arman/backup_mensagens_20260522_121816.sql` (734K, fora do webroot)
+
+### Testes funcionais necessários após execução
+
+- [ ] Caixa de entrada carrega mensagens (verifica idx_msg_dest_status_data)
+- [ ] Caixa de saída carrega mensagens (verifica idx_env_remetente_data)
+- [ ] Enviar mensagem nova (verifica INSERTs pós-InnoDB)
+- [ ] Ler mensagem recebida (verifica buscarRecebidaPorId)
+- [ ] Excluir mensagem (verifica DELETE pós-InnoDB)
+- [x] EXPLAIN não retorna `type: ALL` — ambas usam `type: ref` ✓
+- [ ] Verificar caracteres especiais preservados (acentos, cedilha)
+
+---
+
+## Fase 4B Executada — 2026-05-22
+
+### Escopo
+
+Apenas operações seguras e não destrutivas: InnoDB, utf8mb4 e índices. Sem FK, sem novas colunas, sem exclusão lógica, sem alteração PHP/JS.
+
+### Pré-verificação
+
+| Item | Resultado |
+|---|---|
+| Git status | `docs` modificado — nenhuma alteração não commitada em PHP/JS |
+| Engine antes | MyISAM (ambas) |
+| Charset antes | utf8mb3_bin (ambas) |
+| Linhas antes | mensagem: 779, mensagemenviada: 676 |
+| AUTO_INCREMENT | 1031 (ambas) |
+| Chars fora de utf8mb3 (emojis/4-byte) | 0 — conversão segura |
+
+### Backup
+
+**Arquivo:** `C:/Users/arman/backup_mensagens_20260522_121816.sql`  
+**Tamanho:** 734K  
+**Gerado com:** `mysqldump --single-transaction --routines --triggers`  
+**Conteúdo:** 2 INSERTs (1 por tabela), dump completo validado
+
+### SQL executado
+
+```sql
+-- Etapa 2: ENGINE
+ALTER TABLE mensagem        ENGINE = InnoDB;
+ALTER TABLE mensagemenviada ENGINE = InnoDB;
+
+-- Etapa 3: CHARSET
+ALTER TABLE mensagem        CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE mensagemenviada CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- Etapa 4: ÍNDICES (6 no total)
+CREATE INDEX idx_msg_dest_status_data  ON mensagem (destinatarioRec, status, enviadaEm);
+CREATE INDEX idx_msg_dest_id           ON mensagem (destinatarioRec, idMensagemRec);
+CREATE INDEX idx_msg_remetente_data    ON mensagem (remetenteRec, enviadaEm);
+CREATE INDEX idx_env_remetente_data    ON mensagemenviada (remetenteEnv, enviadaEm);
+CREATE INDEX idx_env_remetente_id      ON mensagemenviada (remetenteEnv, idMensagemEnv);
+CREATE INDEX idx_env_dest_data         ON mensagemenviada (destinatarioEnv, enviadaEm);
+```
+
+Etapas 5 (novas colunas) e 6 (FK) **não executadas** — fora do escopo da Fase 4B.
+
+### Estado pós-migração
+
+| Tabela | Engine | Collation | Índices |
+|---|---|---|---|
+| `mensagem` | InnoDB | utf8mb4_unicode_ci | PK + 3 compostos |
+| `mensagemenviada` | InnoDB | utf8mb4_unicode_ci | PK + 3 compostos |
+
+### Índices criados
+
+| Nome | Tabela | Colunas | Uso |
+|---|---|---|---|
+| `idx_msg_dest_status_data` | mensagem | (destinatarioRec, status, enviadaEm) | Caixa de entrada: filtro + não lidas + ordenação |
+| `idx_msg_dest_id` | mensagem | (destinatarioRec, idMensagemRec) | Lookup por ID com autorizaçao |
+| `idx_msg_remetente_data` | mensagem | (remetenteRec, enviadaEm) | Auditoria por remetente |
+| `idx_env_remetente_data` | mensagemenviada | (remetenteEnv, enviadaEm) | Caixa de saída: filtro + ordenação |
+| `idx_env_remetente_id` | mensagemenviada | (remetenteEnv, idMensagemEnv) | Lookup por ID com autorização |
+| `idx_env_dest_data` | mensagemenviada | (destinatarioEnv, enviadaEm) | Busca por destinatário |
+
+### Verificação pós-migração
+
+| Verificação | Resultado |
+|---|---|
+| Linhas mensagem | 779 ✓ (idêntico ao antes) |
+| Linhas mensagemenviada | 676 ✓ (idêntico ao antes) |
+| EXPLAIN caixa de entrada | `type=ref`, key=`idx_msg_dest_status_data`, ~50 rows — índice em uso ✓ |
+| EXPLAIN caixa de saída | `type=ref`, key=`idx_env_remetente_data`, ~8 rows, backward scan ✓ |
+| Full scan eliminado | Sim — era `type=ALL` (778/676 rows), agora `type=ref` ✓ |
+
+**Observação sobre `Using filesort`:** a query `WHERE destinatarioRec = X ORDER BY enviadaEm DESC` usa `idx_msg_dest_status_data (dest, status, enviadaEm)`. MySQL filtra com o índice mas faz filesort porque `status` interrompe a ordenação por `enviadaEm`. O sort ocorre em ~50 linhas — custo negligível. Para eliminar o filesort seria necessário índice `(destinatarioRec, enviadaEm)` separado, mas o ganho não justifica índice adicional com 779 linhas.
+
+### Problemas encontrados
+
+Nenhum. Todas as etapas executadas sem erro.
+
+### Testes manuais pendentes
+
+- [ ] Listar caixa de entrada (verificar que mensagens aparecem normalmente)
+- [ ] Listar caixa de enviadas
+- [ ] Abrir mensagem recebida
+- [ ] Abrir mensagem enviada
+- [ ] Enviar mensagem nova
+- [ ] Responder mensagem
+- [ ] Excluir mensagem recebida
+- [ ] Excluir mensagem enviada
+- [ ] Verificar acentos e cedilha preservados no conteúdo exibido
+
+### Pendências para Fase 4C
+
+- Implementar exclusão lógica (`excluidaEm DATETIME NULL`) nas duas tabelas — requer:
+  1. `ADD COLUMN` nas tabelas
+  2. Índices com `excluidaEm` para filtro eficiente
+  3. Alterar PHP: trocar `DELETE` por `UPDATE ... SET excluidaEm = NOW()`
+  4. Alterar queries de listagem: adicionar `WHERE excluidaEm IS NULL`
+- Avaliar FK para `cadastroministro.rm` (verificar órfãos antes)
+- Avaliar campo `atualizadoEm TIMESTAMP ON UPDATE` para auditoria
