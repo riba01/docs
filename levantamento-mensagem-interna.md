@@ -1304,3 +1304,168 @@ Nenhum. Todas as etapas executadas sem erro.
   4. Alterar queries de listagem: adicionar `WHERE excluidaEm IS NULL`
 - Avaliar FK para `cadastroministro.rm` (verificar órfãos antes)
 - Avaliar campo `atualizadoEm TIMESTAMP ON UPDATE` para auditoria
+
+---
+
+## Fase 4C Executada — 2026-05-22
+
+### Escopo
+
+Exclusão lógica via `excluidaEm DATETIME NULL`, índices correspondentes, atualização do repository. FK avaliada — não criada por existência de órfãos históricos.
+
+### Backup
+
+**Arquivo:** `C:/Users/arman/backup_mensagens_fase4c_20260522_132329.sql`  
+**Tamanho:** 734K  
+**Gerado com:** `mysqldump --single-transaction --routines --triggers`
+
+### Verificações pré-execução
+
+| Verificação | Resultado |
+|---|---|
+| Git status | Árvore limpa — sem alterações pendentes |
+| mensagem ENGINE | InnoDB ✓ |
+| mensagemenviada ENGINE | InnoDB ✓ |
+| cadastroministro ENGINE | InnoDB ✓ |
+
+### Verificação de órfãos
+
+| Query | Resultado |
+|---|---|
+| `mensagem.remetenteRec` sem `cadastroministro.rm` | **0** ✓ |
+| `mensagem.destinatarioRec` sem `cadastroministro.rm` | **4** ✗ |
+| `mensagemenviada.remetenteEnv` sem `cadastroministro.rm` | **0** ✓ |
+| `mensagemenviada.destinatarioEnv` sem `cadastroministro.rm` | **0** ✓ |
+
+### Detalhes dos 4 órfãos (mensagem.destinatarioRec)
+
+| idMensagemRec | remetenteRec | destinatarioRec | assunto | enviadaEm |
+|---|---|---|---|---|
+| 6 | 2 | 15 | teset | 2012-05-13 |
+| 12 | 2 | 24 | Pane ao trocar senha | 2012-06-20 |
+| 13 | 2 | 24 | Limpeza do sistema | 2012-06-20 |
+| 14 | 2 | 24 | CPF do Wellington Fernandes | 2012-06-25 |
+
+**Decisão:** FK não criada. Destinatários rm=15 e rm=24 foram removidos do sistema antes de 2026. Mensagens de 2012, nunca visíveis nas listagens (destinatário inexistente). Não foram excluídas para preservar histórico.
+
+**Para criar FK no futuro:** tratar esses 4 registros (excluir logicamente ou reatribuir destinatário) e re-executar verificação de órfãos.
+
+### SQL executado
+
+```sql
+-- Colunas de exclusão lógica
+ALTER TABLE mensagem        ADD COLUMN excluidaEm DATETIME NULL DEFAULT NULL;
+ALTER TABLE mensagemenviada ADD COLUMN excluidaEm DATETIME NULL DEFAULT NULL;
+
+-- Índices para filtro eficiente de não-excluídas
+CREATE INDEX idx_msg_dest_ativo ON mensagem        (destinatarioRec, excluidaEm, enviadaEm);
+CREATE INDEX idx_env_rem_ativo  ON mensagemenviada (remetenteEnv,    excluidaEm, enviadaEm);
+```
+
+### Arquivo alterado
+
+**`classes/MensagemRepository.php`** — 6 métodos atualizados:
+
+| Método | Alteração |
+|---|---|
+| `listarRecebidas` | `WHERE destinatarioRec = :rm AND excluidaEm IS NULL ORDER BY enviadaEm DESC` |
+| `listarEnviadas` | `WHERE remetenteEnv = :rm AND excluidaEm IS NULL ORDER BY enviadaEm DESC` |
+| `buscarRecebidaPorId` | `WHERE idMensagemRec = :id AND destinatarioRec = :rm AND excluidaEm IS NULL LIMIT 1` |
+| `buscarEnviadaPorId` | `WHERE idMensagemEnv = :id AND remetenteEnv = :rm AND excluidaEm IS NULL LIMIT 1` |
+| `excluirRecebida` | `UPDATE mensagem SET excluidaEm = NOW() WHERE idMensagemRec = :id AND destinatarioRec = :rm AND excluidaEm IS NULL` |
+| `excluirEnviada` | `UPDATE mensagemenviada SET excluidaEm = NOW() WHERE idMensagemEnv = :id AND remetenteEnv = :rm AND excluidaEm IS NULL` |
+
+**`php -l`:** sem erros de sintaxe ✓
+
+### Efeito da exclusão lógica
+
+- `excluirRecebida` e `excluirEnviada` não fazem mais DELETE. Definem `excluidaEm = NOW()`.
+- Mensagem "excluída" não aparece em nenhuma listagem nem pode ser aberta (todos os `WHERE` filtram `excluidaEm IS NULL`).
+- Duplo clique em excluir é idempotente — segundo UPDATE não encontra registro com `excluidaEm IS NULL`.
+- Dados ficam no banco para auditoria futura.
+
+### Índices criados
+
+| Nome | Tabela | Colunas | Motivo |
+|---|---|---|---|
+| `idx_msg_dest_ativo` | mensagem | (destinatarioRec, excluidaEm, enviadaEm) | Listagem de recebidas não-excluídas |
+| `idx_env_rem_ativo` | mensagemenviada | (remetenteEnv, excluidaEm, enviadaEm) | Listagem de enviadas não-excluídas |
+
+**EXPLAIN pós-criação:** ambas as queries retornam `type=ref` com índices em uso. `excluidaEm IS NULL` aplicado como filtro inline — custo baixo (~50 e ~8 linhas, respectivamente).
+
+### Problemas encontrados
+
+Nenhum. SQL executado sem erros. `php -l` limpo.
+
+### Testes manuais pendentes
+
+- [ ] Listar caixa de entrada — mensagens aparecem normalmente
+- [ ] Listar caixa de enviadas — idem
+- [ ] Abrir mensagem recebida
+- [ ] Abrir mensagem enviada
+- [ ] Enviar mensagem nova (verifica INSERT sem excluidaEm → NULL automático)
+- [ ] Responder mensagem (fluxo completo)
+- [ ] Excluir mensagem recebida — verificar que desaparece da lista e que `excluidaEm` foi preenchido no banco
+- [ ] Excluir mensagem enviada — idem
+- [ ] Tentar abrir mensagem excluída via URL direta — deve retornar "Mensagem não encontrada."
+- [ ] Verificar caracteres especiais preservados (acentos, cedilha)
+
+### Pendências para Fase 5 (auditoria e governança)
+
+- FK para `cadastroministro.rm`: resolver 4 órfãos históricos (rm=15, rm=24) e re-executar verificação ✅ **Fase 5A executada em 2026-05-22**
+- Campo `atualizadoEm TIMESTAMP ON UPDATE` para rastreamento automático de modificações
+- Política de retenção: definir por quanto tempo manter mensagens logicamente excluídas
+- Registrar exclusões em tabela de log/auditoria se `registro_atividade` existir no projeto
+
+---
+
+## Fase 5A — 2026-05-22
+
+**Objetivo:** Remover órfãos de teste (2012) e criar FKs com `cadastroministro.rm`.
+
+### Backup
+
+`sql/backup_mensagens_fase5a_20260522_173847.sql` (742 KB) — gerado antes de qualquer alteração.
+
+### Órfãos removidos
+
+| idMensagemRec | remetenteRec | destinatarioRec | assuntoRec | enviadaEm |
+|---|---|---|---|---|
+| 6 | 2 | 15 | teset | 2012-05-13 |
+| 12 | 2 | 24 | Pane ao trocar senha | 2012-06-20 |
+| 13 | 2 | 24 | Limpeza do sistema | 2012-06-20 |
+| 14 | 2 | 24 | CPF do Wellington Fernandes | 2012-06-25 |
+
+4 registros de `mensagem.destinatarioRec` sem correspondência em `cadastroministro.rm` (RM 15 e 24 inexistentes). Removidos via `DELETE ... LEFT JOIN`.
+
+### Verificação pós-DELETE
+
+| Verificação | Órfãos |
+|---|---|
+| mensagem.remetenteRec | 0 |
+| mensagem.destinatarioRec | 0 |
+| mensagemenviada.remetenteEnv | 0 |
+| mensagemenviada.destinatarioEnv | 0 |
+
+### FKs criadas
+
+| Constraint | Tabela | Coluna | Referência | ON DELETE | ON UPDATE |
+|---|---|---|---|---|---|
+| `fk_mensagem_remetente` | mensagem | remetenteRec | cadastroministro.rm | RESTRICT | CASCADE |
+| `fk_mensagem_destinatario` | mensagem | destinatarioRec | cadastroministro.rm | RESTRICT | CASCADE |
+| `fk_mensagemenviada_remetente` | mensagemenviada | remetenteEnv | cadastroministro.rm | RESTRICT | CASCADE |
+| `fk_mensagemenviada_destinatario` | mensagemenviada | destinatarioEnv | cadastroministro.rm | RESTRICT | CASCADE |
+
+### Teste de integridade
+
+INSERT com RM inexistente (99999) → `ERROR 1452: Cannot add or update a child row: a foreign key constraint fails`. FK funcional.
+
+### Problemas encontrados
+
+Nenhum. Todos os ALTERs executados sem erro.
+
+### Pendências restantes (Fase 5B+)
+
+- Campo `atualizadoEm TIMESTAMP ON UPDATE` para rastreamento automático de modificações
+- Política de retenção: definir por quanto tempo manter mensagens logicamente excluídas
+- Registrar exclusões em tabela de log/auditoria se `registro_atividade` existir no projeto
