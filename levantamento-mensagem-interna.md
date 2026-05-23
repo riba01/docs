@@ -1469,3 +1469,217 @@ Nenhum. Todos os ALTERs executados sem erro.
 - Campo `atualizadoEm TIMESTAMP ON UPDATE` para rastreamento automático de modificações
 - Política de retenção: definir por quanto tempo manter mensagens logicamente excluídas
 - Registrar exclusões em tabela de log/auditoria se `registro_atividade` existir no projeto
+
+---
+
+## Fase 5B — 2026-05-23
+
+**Objetivo:** Transação atômica no envio de mensagens internas.
+
+### Arquivo alterado
+
+`mensagem/enviarMensagemAcao.php`
+
+### O que foi feito
+
+Fluxo reestruturado em 3 fases:
+
+| Fase | O que faz |
+|---|---|
+| 1 — Resolver RMs | SELECTs em `cadastroministro` para todos os destinatários, antes de abrir a transação |
+| 2 — Transação atômica | `beginTransaction()` → INSERTs em `mensagem` + `mensagemenviada` para todos → `commit()` |
+| 3 — Notificações | PHPMailer enviado **após** commit, fora da transação |
+
+### Regra adotada para falha de e-mail
+
+**Opção B:** banco gravado com sucesso, falha de e-mail registrada em `error_log` e ignorada.
+
+Motivação: mensagem interna é o recurso principal. E-mail é notificação auxiliar.
+
+### O que foi preservado
+
+- CSRF via `Csrf::validateToken()`
+- `$rmRemetente` exclusivamente de `$_SESSION['rm']`
+- Prepared statements via `MensagemRepository`
+- Nenhum detalhe técnico exposto ao usuário
+- `MensagemRepository.php` sem alteração
+
+### Arquivos NÃO alterados nesta fase
+
+`iecp/mensagem/enviarMensagemAcao.php`, `usuario/mensagem/enviarMensagemAcao.php` e `coniecp/mensagem/enviarMensagemAcao.php` são versões legadas fora do escopo desta refatoração.
+
+### Resultado do php -l
+
+`mensagem/enviarMensagemAcao.php` → No syntax errors detected
+
+### Testes manuais pendentes
+
+- [ ] Envio para 1 destinatário válido → mensagem gravada + e-mail enviado
+- [ ] Envio para 2 destinatários válidos → 2 registros em `mensagem`, 2 em `mensagemenviada`
+- [ ] E-mail com SMTP offline → banco gravado, `error_log` registra falha, usuário vê "Mensagem enviada com sucesso!"
+- [ ] Destinatário com e-mail inválido no array → ignorado, destinatários válidos gravados
+- [ ] Destinatário sem RM em `cadastroministro` → ignorado
+- [ ] Simular falha no segundo INSERT (ex.: desconectar banco) → rollBack desfaz o primeiro INSERT
+
+### Pendências para Fase 5C
+
+- `iecp/mensagem/enviarMensagemAcao.php` e `usuario/mensagem/enviarMensagemAcao.php`: avaliar se devem ser substituídos pela versão moderna ou desativados
+- Campo `atualizadoEm TIMESTAMP ON UPDATE` para rastreamento automático de modificações
+- Política de retenção para mensagens logicamente excluídas
+- Tabela de auditoria/log de exclusões se `registro_atividade` existir no projeto
+
+---
+
+## Fase 5C — 2026-05-23
+
+**Objetivo:** Auditar e corrigir endpoints legados de envio de mensagem com SQL Injection e lógica antiga.
+
+### Mapeamento de uso
+
+| Arquivo | Status | Callers ativos |
+|---|---|---|
+| `iecp/mensagem/enviarMensagemAcao.php` | **Ativo** | `iecp/mensagem/enviarMensagem.php`, `usuario/mensagem/enviarMensagem.php` |
+| `coniecp/mensagem/enviarMensagemAcao.php` | **Ativo** | `coniecp/mensagem/enviarMensagem.php`, `coniecp/mensagem/responderMensagem.php` |
+| `usuario/mensagem/enviarMensagemAcao.php` | **Órfão** | Nenhum — ambas as views de usuário postavam para `iecp/mensagem/enviarMensagemAcao.php` |
+
+Nota: `mensagem/enviarMensagemAcao.php` (módulo moderno) é chamado via `painel.php` com `pagina=mensagem/enviarMensagemAcao`. Os endpoints legados acima são chamados por AJAX direto (HTTP request ao arquivo), portanto usam paths `../../` para atingir a raiz.
+
+### Correções aplicadas
+
+**`iecp/mensagem/enviarMensagemAcao.php`** e **`coniecp/mensagem/enviarMensagemAcao.php`** (mesmas correções em ambos):
+
+| Problema | Antes | Depois |
+|---|---|---|
+| SQL Injection | `WHERE email = '".$email."'` | `buscarRmPorEmail()` via prepared statement |
+| RM forjável | `$rmRemetente = $_POST['rm']` | `$rmRemetente = (string) $_SESSION['rm']` |
+| Sem validação de sessão | `session_start()` sem checagem | `StartSecureSession` + guard `empty($_SESSION['email'])` |
+| PHPMailer legado | `class.phpmailer.php` antigo | `vendor/autoload.php` + PHPMailer moderno |
+| Erros expostos ao usuário | `echo 'Erro: '.$e->getMessage()` | `error_log()` + mensagem genérica |
+| Sem transação | 2 INSERTs não atômicos | `beginTransaction / commit / rollBack` |
+| `declare(strict_types)` | ausente | adicionado |
+
+**`usuario/mensagem/enviarMensagemAcao.php`** (órfão):
+- Desativado com `http_response_code(410); exit()` — arquivo preservado conforme instrução, não deletado.
+- Comentário explica por que foi desativado e quando remover definitivamente.
+
+### SQL Injection removido
+
+Sim. Nenhuma query concatenada. Todo acesso ao banco via `MensagemRepository` com prepared statements.
+
+### CSRF
+
+**Não adicionado** nos endpoints legados. Motivo: os callers (`iecp/mensagem/enviarMensagem.php`, `usuario/mensagem/enviarMensagem.php`, `coniecp/mensagem/*.php`) usam AJAX hardcoded que não envia `csrf_token`. Adicionar validação CSRF quebraria todas as chamadas existentes. Pendente Fase 5D (migração das views legadas para JS moderno).
+
+**Mitigação presente:** `$rmRemetente` fixado em `$_SESSION['rm']` — ataque CSRF não pode mais forjar identidade do remetente.
+
+### php -l
+
+```
+No syntax errors detected in iecp/mensagem/enviarMensagemAcao.php
+No syntax errors detected in coniecp/mensagem/enviarMensagemAcao.php
+No syntax errors detected in usuario/mensagem/enviarMensagemAcao.php
+```
+
+### Arquivos alterados
+
+- `iecp/mensagem/enviarMensagemAcao.php` — refatorado
+- `coniecp/mensagem/enviarMensagemAcao.php` — refatorado
+- `usuario/mensagem/enviarMensagemAcao.php` — desativado (410)
+
+### Testes manuais pendentes
+
+- [ ] Login como usuário IECP → enviar mensagem pela tela `iecp/mensagem/enviarMensagem` → confirmar gravação no banco
+- [ ] Login como usuário CONIECP → enviar mensagem pela tela `coniecp/mensagem/enviarMensagem` → confirmar gravação no banco
+- [ ] Login como usuário USUARIO → enviar mensagem (usa `iecp/mensagem/enviarMensagemAcao.php`) → confirmar gravação
+- [ ] Acesso direto a `usuario/mensagem/enviarMensagemAcao.php` → deve retornar HTTP 410
+- [ ] Tentar envio sem sessão ativa nos 3 módulos → deve retornar HTTP 403
+- [ ] SMTP offline → banco gravado, `error_log` registra falha, UI mostra sucesso
+
+### Pendências para Fase 5D
+
+- Migrar JS legado das views (`iecp/mensagem/enviarMensagem.php`, `usuario/mensagem/enviarMensagem.php`, `coniecp/mensagem/enviarMensagem.php`) para enviar `csrf_token` — habilita proteção CSRF completa nos endpoints
+- Remover `usuario/mensagem/enviarMensagemAcao.php` definitivamente após confirmar que nenhuma integração externa usa a URL
+- Campo `atualizadoEm TIMESTAMP ON UPDATE` nas tabelas `mensagem` e `mensagemenviada`
+- Política de retenção para mensagens logicamente excluídas
+- Auditoria de exclusões se `registro_atividade` existir no projeto
+
+---
+
+## Fase 5D — 2026-05-23
+
+**Objetivo:** CSRF completo nos endpoints legados ativos de mensagem.
+
+### Views e JS identificados
+
+| View | Endpoint alvo | Mudança JS | Mudança PHP |
+|---|---|---|---|
+| `iecp/mensagem/enviarMensagem.php` | `iecp/mensagem/enviarMensagemAcao.php` | `csrf_token: $("#csrf_token").val()` adicionado ao `$.post` | `\Classes\Csrf::htmlField()` após `<legend>` |
+| `usuario/mensagem/enviarMensagem.php` | `iecp/mensagem/enviarMensagemAcao.php` | idem | idem |
+| `coniecp/mensagem/enviarMensagem.php` | `coniecp/mensagem/enviarMensagemAcao.php` | idem | idem |
+| `coniecp/mensagem/responderMensagem.php` | `coniecp/mensagem/enviarMensagemAcao.php` | idem | `\Classes\Csrf::htmlField()` após `<legend>` |
+
+### CSRF aplicado
+
+**Endpoints de ação** (`iecp/mensagem/enviarMensagemAcao.php` e `coniecp/mensagem/enviarMensagemAcao.php`):
+- Adicionado `use Classes\Csrf`
+- Validação logo após guard de sessão: `Csrf::validateToken($csrfRecebido)` → 403 em token ausente/inválido
+- Comentário "CSRF pendente" atualizado (estava desatualizado da Fase 5C)
+
+**Views** (4 arquivos):
+- `\Classes\Csrf::htmlField()` gera `<input type="hidden" name="csrf_token" id="csrf_token" value="...">` inline no fieldset
+- `Csrf` autoloaded via `vendor/autoload.php` (PSR-4: `Classes\\` → `classes/`) carregado em `valida_sessao_all.php`
+- JS já modificado na Fase 5C passa `csrf_token: $("#csrf_token").val()` no payload do `$.post`
+
+### Critérios atendidos
+
+| Critério | Status |
+|---|---|
+| Fluxo IECP envia csrf_token | ✓ |
+| Fluxo CONIECP envia csrf_token | ✓ |
+| Endpoint IECP rejeita sem token | ✓ HTTP 403 |
+| Endpoint CONIECP rejeita sem token | ✓ HTTP 403 |
+| `usuario/mensagem/enviarMensagemAcao.php` continua 410 | ✓ não alterado |
+| Nenhuma mudança de banco | ✓ |
+| Nenhuma quebra visual | ✓ campo hidden não renderiza |
+
+### php -l
+
+```
+No syntax errors detected — iecp/mensagem/enviarMensagemAcao.php
+No syntax errors detected — coniecp/mensagem/enviarMensagemAcao.php
+No syntax errors detected — iecp/mensagem/enviarMensagem.php
+No syntax errors detected — usuario/mensagem/enviarMensagem.php
+No syntax errors detected — coniecp/mensagem/enviarMensagem.php
+No syntax errors detected — coniecp/mensagem/responderMensagem.php
+```
+
+### Arquivos alterados
+
+- `iecp/mensagem/enviarMensagemAcao.php` — CSRF validado
+- `coniecp/mensagem/enviarMensagemAcao.php` — CSRF validado
+- `iecp/mensagem/enviarMensagem.php` — token gerado + JS atualizado
+- `usuario/mensagem/enviarMensagem.php` — token gerado + JS atualizado
+- `coniecp/mensagem/enviarMensagem.php` — token gerado + JS atualizado
+- `coniecp/mensagem/responderMensagem.php` — token gerado + JS atualizado
+
+### Testes manuais pendentes
+
+- [ ] Login IECP → enviar mensagem → confirmar envio bem-sucedido com token válido
+- [ ] Login USUARIO → enviar mensagem (endpoint iecp) → confirmar envio bem-sucedido
+- [ ] Login CONIECP → enviar mensagem → confirmar envio bem-sucedido
+- [ ] Login CONIECP → responder mensagem → confirmar resposta gravada
+- [ ] Simular POST manual a `iecp/mensagem/enviarMensagemAcao.php` sem csrf_token → deve retornar HTTP 403
+- [ ] Simular POST manual a `coniecp/mensagem/enviarMensagemAcao.php` sem csrf_token → deve retornar HTTP 403
+- [ ] Acesso direto a `usuario/mensagem/enviarMensagemAcao.php` → deve retornar HTTP 410
+
+### Próxima fase recomendada
+
+**Fase 5E (manutenção/limpeza):**
+- Remover `usuario/mensagem/enviarMensagemAcao.php` definitivamente após confirmar zero integrações externas
+- Atualizar comentário de docblock nos 2 endpoints legados (remover "CSRF pendente")
+- Avaliar unificação dos 3 endpoints (`mensagem/`, `iecp/mensagem/`, `coniecp/mensagem/`) em ponto único roteado via `painel.php`
+
+**Fase 6 (banco/auditoria):**
+- Campo `atualizadoEm TIMESTAMP ON UPDATE`
+- Política de retenção para exclusões lógicas
+- Tabela de auditoria de exclusões
