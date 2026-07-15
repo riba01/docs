@@ -1,6 +1,8 @@
 # Plano LGPD — SISCONIECP/SWGA
 
-Atualizado em 14/07/2026. Branch `lgpd`. Fases 0-3 concluídas e validadas em dev.
+Atualizado em 15/07/2026. Branch `lgpd` (mergeada em `main`). **Fases 0-5
+concluídas em dev.** Pendências que dependem de terceiros/decisão: nome do
+DPO, execução da anonimização em massa, push --force, deploy produção.
 
 ## Fase 0 — Pré-requisitos de segurança ✅ CONCLUÍDA
 
@@ -120,12 +122,22 @@ de junção, endereço/telefone — protegidos pela Fase 2 + controle de acesso.
 - ⬜ Deploy produção: subir `.env.sisconiecp` + chaves acima do webroot;
   rodar na ordem: `fase3_migrar_colunas` → `fase3_backfill` → deploy código →
   validar → `fase3_drop_colunas_claras --confirmo` (com backup antes).
-- 🔶 Purgar 338 PDFs pessoais do histórico git (`git filter-repo`) — em
-  execução 15/07/2026.
+- ✅ Histórico git purgado (15/07/2026, `git filter-repo`): todos os PDFs
+  (1143 no histórico) + `ficha-Membro/documentos/` + imagens de anexos.
+  Repo 1,65 → 1,29 GiB. Backup espelho pré-rewrite:
+  `D:\backups_swga\sisconiecp_pre_filter_repo.git`.
+  ⚠️ Hashes mudaram: `git push --force` para origin e re-clone por
+  quaisquer outras cópias.
+- ✅ DESCOBERTA/CORREÇÃO (15/07/2026): 826 documentos pessoais em
+  `iecp/oficio/anexos`, `coniecp/oficio/anexos` e `iecp/membro/anexos`
+  (certidões, RG/CPF, sindicâncias) estavam versionados E acessíveis por
+  URL sem login. Gate serve.php + .htaccess aplicado (padrão Fotos/),
+  untracked + .gitignore, histórico purgado. Validado: acesso direto → 403.
 - ✅ Fotos renomeadas (15/07/2026): 2182 referenciadas → `img_<uniqid>.<ext>`
   + coluna atualizada; 331 órfãs → `orfao_<uniqid>`; 0 nomes com CPF/dados
   restantes (`scripts/lgpd/renomear_fotos.php`). rm=573 tinha referência a
   arquivo inexistente — foto zerada.
 - ✅ Coluna `cadastroministro.senha` zerada e DROPADA + OPTIMIZE (15/07/2026).
 - ✅ Removidos `Ministro_nova.class.php` e `classes/app/` (15/07/2026).
-- ⬜ Merge da branch `lgpd` em `main` (após filter-repo).
+- ✅ Merge `lgpd` → `main` (15/07/2026, fast-forward pós filter-repo).
+  Pendente: `git push --force origin main lgpd` (hashes reescritos).
