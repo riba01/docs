@@ -69,24 +69,36 @@ classificação por coluna, bases legais, decisões da Fase 3, pendências.
 Não cifrado campo a campo (decisão mantida): nomes, datas de filtro, chaves
 de junção, endereço/telefone — protegidos pela Fase 2 + controle de acesso.
 
-## Fase 4 — Direitos do titular ⬜ PENDENTE
+## Fase 4 — Direitos do titular 🔶 EM ANDAMENTO
 
-Bloqueada por decisões do responsável:
-1. Encarregado (DPO): nome/contato para publicar (art. 41).
-2. Prazos de retenção: membro desligado, mensagens internas, logs
-   (sugestão logs: 6 meses — Marco Civil art. 15).
-3. Textos: política de privacidade + termo de consentimento (rascunho pode
-   ser gerado para revisão).
+- ✅ Rascunhos gerados para revisão (15/07/2026):
+  `docs/lgpd/politica-privacidade-RASCUNHO.md` e
+  `docs/lgpd/termo-consentimento-RASCUNHO.md` — placeholders [DPO_*],
+  [PRAZO_*], [RAZÃO SOCIAL] aguardam decisões abaixo.
+- ⬜ Bloqueada por decisões do responsável:
+  1. Encarregado (DPO): nome/contato para publicar (art. 41).
+  2. Prazos de retenção: membro desligado, mensagens internas, logs
+     (sugestão logs: 6 meses — Marco Civil art. 15).
+  3. Aprovação dos textos (revisão jurídica recomendada).
+- ⬜ Entregas: exportar dados em `meus-dados/` (art. 18 V), correção, rotina
+  de anonimização de desligados pós-retenção, registro de aceite
+  (data/IP/versão do termo — tabela `aceite_termo`), página do DPO.
 
-Entregas: exportar dados em `meus-dados/` (art. 18 V), correção, rotina de
-anonimização de desligados pós-retenção, registro de aceite (data/IP/versão
-do termo), página do DPO.
+## Fase 5 — Auditoria e incidentes 🔶 EM ANDAMENTO
 
-## Fase 5 — Auditoria e incidentes ⬜ PENDENTE
-
-- Tabela `auditoria_acesso` (quem viu ficha/CPF de quem, quando).
-- Revisão de retenção de logs (`log/`, `logs/`, `error_log`).
-- Procedimento de notificação à ANPD (art. 48).
+- ✅ `classes/Auditoria.class.php` + tabela `auditoria_acesso` (auto-criada,
+  ENCRYPTION='Y' com fallback; fail-open com error_log). Instrumentados:
+  fichaMembro, dados (ficha ministro), dadosEditarUsuario, 2× gerarPdfFicha,
+  2× gerarPdfCredencialMembro (1 registro por titular), verificaCpf,
+  buscaMembrosAcao (busca CPF), 3 PDFs de lista (lote).
+- ✅ Gate de sessão (`valida_sessao_all.php`) adicionado aos 4 PDFs de
+  ficha/credencial — antes eram acessíveis sem login (continham CPF/RG).
+- ✅ Purga: `scripts/lgpd/purgar_auditoria.php` (padrão 6 meses) — agendar.
+- ✅ Revisão de retenção de logs: `docs/lgpd/retencao-logs.md` (inventário
+  arquivo+banco, política proposta de 6 meses, pendências).
+- ⬜ Purga análoga para `user_sessions`/`registro_atividade`.
+- ⬜ Procedimento de notificação à ANPD (art. 48).
+- ⬜ Validar em runtime (MySQL parado durante a implementação).
 
 ## Pendências gerais
 
@@ -95,6 +107,8 @@ do termo), página do DPO.
   validar → `fase3_drop_colunas_claras --confirmo` (com backup antes).
 - ⬜ Purgar 338 PDFs pessoais do histórico git (`git filter-repo`).
 - ⬜ Renomear fotos para não usar CPF como nome de arquivo.
-- ⬜ Coluna `cadastroministro.senha` (hash legado, sem uso no código): zerar/dropar.
-- ⬜ Remover `Ministro_nova.class.php` e `classes/app/` (tentativa antiga, sem uso).
+- 🔶 Coluna `cadastroministro.senha` (hash legado, sem uso no código):
+  script pronto (`scripts/lgpd/dropar_coluna_senha_cadastroministro.php
+  --confirmo`) — rodar com MySQL ativo.
+- ✅ Removidos `Ministro_nova.class.php` e `classes/app/` (15/07/2026).
 - ⬜ Merge da branch `lgpd` em `main`.
