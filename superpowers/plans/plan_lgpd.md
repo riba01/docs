@@ -1,8 +1,9 @@
 # Plano LGPD — SISCONIECP/SWGA
 
-Atualizado em 15/07/2026. Branch `lgpd` (mergeada em `main`). **Fases 0-5
-concluídas em dev.** Pendências que dependem de terceiros/decisão: nome do
-DPO, execução da anonimização em massa, push --force, deploy produção.
+Atualizado em 15/07/2026. Branch `lgpd` (mergeada em `main`, push feito).
+**Fases 0-5 concluídas em dev.** Débitos do responsável: (1) nome/contato do
+DPO (placeholders em encarregado.php/politica-privacidade.php/docs);
+(2) deploy produção (ordem abaixo em Pendências gerais).
 
 ## Fase 0 — Pré-requisitos de segurança ✅ CONCLUÍDA
 
@@ -86,9 +87,13 @@ de junção, endereço/telefone — protegidos pela Fase 2 + controle de acesso.
 - ✅ Exportação (art. 18 V): `meus-dados/exportarDados.php` — JSON com
   cadastro decifrado + históricos + registros de acesso; botão em Meus
   Dados; acesso auditado. Correção já existia (meus-dados edita).
-- ✅ Anonimização: `scripts/lgpd/anonimizar_desligados.php` (dry-run padrão,
-  --confirmo executa; 1296 candidatos no dry-run de 15/07/2026 — EXECUÇÃO
-  EM MASSA AGUARDA DECISÃO do responsável; agendar mensal depois).
+- ✅ Anonimização EXECUTADA (15/07/2026): 1296/1296 desligados/excluídos há
+  5+ anos anonimizados. Decisão: `cpf_bidx` PRESERVADO (pseudonimização —
+  HMAC não recupera CPF, mas verificaCpf detecta retorno e permite
+  reaproveitar rm/histórico no recadastro). Contas login removidas;
+  e-mail vira `anonimizado.<rm>@invalido.local` (UNIQUE). Agendado mensal
+  (Task Scheduler dia 1, 04:00 — `anonimizacao_mensal.cmd`). 6 desligados
+  sem data em situacao_membro ignorados — revisar manualmente.
 - ⬜ ÚNICO PENDENTE: nome/contato do DPO — substituir [DPO_NOME]/
   [DPO_CONTATO] em encarregado.php, politica-privacidade.php e docs/lgpd/*.
   Revisão jurídica dos textos recomendada.
