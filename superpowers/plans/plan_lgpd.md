@@ -1,87 +1,100 @@
-Fase 0 — Pré-requisitos de segurança (urgente, sem isso criptografia é inútil)
+# Plano LGPD — SISCONIECP/SWGA
 
-    1. Tirar credenciais do código. Connect.php passa a ler .env (ou arquivo de config fora do webroot). Classe mantém mesma interface Connect::getInstance() — zero impacto nos
-    módulos.
-    2. Eliminar md5 de senha por completo. Remover fallback md5 de login.php, admin/verificaSenha.php, meus-dados/alterarSenhaAntiga/; forçar reset para contas ainda em md5.
+Atualizado em 14/07/2026. Branch `lgpd`. Fases 0-3 concluídas e validadas em dev.
 
-Manter
-só Argon2id. 3. Nunca guardar senha (nem hash) em $\_SESSION. Corrigir login.php:118 e usuario/meus-dados/verificaSenha.php. 4. Mover para fora do webroot: backup/, sql/\*.sql (dumps), logs/, csp-violations.log, error_log, uploadfiles//Fotos/ (servir fotos via script com checagem de sessão, não URL
-direta). 5. HTTPS forçado + session.cookie_secure, httponly, samesite (criptografia em trânsito — exigência LGPD art. 46).
+## Fase 0 — Pré-requisitos de segurança ✅ CONCLUÍDA
 
-    Fase 1 — Inventário de dados (base legal)
+1. ✅ Credenciais fora do código — `Connect.php` lê `.env` via `classes/Env.php`
+   (produção: `../.env.sisconiecp` acima do webroot). Interface
+   `Connect::getInstance()` preservada. (commit e6c73350)
+2. ✅ MD5 eliminado do login — só Argon2id (`password_verify`). Conta com hash
+   legado é redirecionada para `esqueci-senha.php?motivo=senha_expirada`
+   (reset forçado). ~35 contas md5 migram no próximo login. (80355871)
+3. ✅ Senha/hash fora de `$_SESSION` — substituído por `senha_fp` (SHA-256 do
+   hash armazenado), validado com `hash_equals` a cada request. (80355871)
+4. ✅ Webroot protegido — `.htaccess` raiz (nega `.env`, `.sql`, `.log`, `.key`,
+   `error_log` + força HTTPS fora de localhost); deny total em `sql/`,
+   `backup/`, `log/`, `logs/`, `classes/`; `Fotos/` (nomes = CPF) e
+   `documentos/` de membros servidos só via `serve.php` com sessão;
+   338 PDFs pessoais removidos do versionamento. (54627dab, 433c93b5)
+5. ✅ HTTPS + cookies — `StartSecureSession` (secure/httponly/samesite Strict)
+   em todos os entry points, incl. `painel.php`. (79aafe51)
 
-    - Mapear tabelas/colunas com dados pessoais: membros, ministros, alunos EBD, usuários, mensagens. Classificar: identificador (CPF, RG), contato (telefone, e-mail, endereço),
-    sensível (foto, possivelmente dados de saúde/eclesiásticos — dado religioso é sensível por definição na LGPD, art. 5º II — filiação a organização religiosa).
-    - Gerar documento docs/lgpd/inventario-dados.md como registro de tratamento (art. 37).
+Extras da fase: 8 endpoints legados mortos com md5/SQLi/vazamento de hash
+deletados; `classes/scripts/mudarRegistrosCadastroMinitro.php` (cifraria a
+tabela in-place via GET sem auth) removido; chave antiga `chave_secreta.key`
+fora do git.
 
-    Fase 2 — Criptografia em repouso, camada 1: transparente (zero risco pro sistema)
+## Fase 1 — Inventário de dados ✅ CONCLUÍDA
 
-    MySQL InnoDB encryption-at-rest (ENCRYPTION='Y' por tabela + keyring). Protege arquivos físicos/discos/backups roubados. Nenhuma linha de PHP muda — aplicação continua lendo
-    dados normalmente. Primeiro passo porque é o único sem risco funcional.
+`docs/lgpd/inventario-dados.md` — registro de tratamento (art. 37): titulares,
+classificação por coluna, bases legais, decisões da Fase 3, pendências.
 
-    - Backups: mysqldump | gpg (ou openssl enc) — dump nunca em claro no disco.
+## Fase 2 — Criptografia em repouso ✅ CONCLUÍDA (dev)
 
-    Fase 3 — Criptografia em repouso, camada 2: nível de aplicação (campos críticos)
+- ✅ Keyring `component_keyring_file` ativo (MySQL 8.4 WAMP; manifest
+  `mysqld.my` + cnf apontando `C:/wamp64/keyring/`).
+- ✅ 103/103 tabelas cifradas (`scripts/lgpd/ativar_criptografia_tabelas.php`).
+  Aprendizados incorporados ao script: 51 tabelas MyISAM → InnoDB;
+  `ROW_FORMAT=DYNAMIC` para legadas FIXED; `sql_mode=''` na sessão por causa
+  de datas `0000-00-00`.
+- ✅ Backup cifrado (`mysqldump | openssl aes-256-cbc -pbkdf2`) —
+  `scripts/lgpd/backup_cifrado.sh|.ps1`; executado (D:\backups_swga); chave em
+  `C:\wamp64\keyring\swga_backup.key` (cópia offline obrigatória).
+- Guia: `docs/lgpd/criptografia-em-repouso.md`.
+- ⬜ Pendente: `default_table_encryption=ON` + redo/undo/binlog no my.ini;
+  agendar backup (Task Scheduler/cron); produção compartilhada não permite
+  keyring — pedir declaração de storage cifrado ao provedor.
 
-    Só para campos que exigem proteção mesmo contra acesso ao banco (DBA, SQL injection): CPF, RG e o que inventário apontar. Endereço/telefone: avaliar custo-benefício — camada
+## Fase 3 — Criptografia de campo (CPF/RG) ✅ CONCLUÍDA (dev)
 
-2
-quebra LIKE, ORDER BY, relatórios.
+- ✅ (fundação) `classes/Crypto.php` — libsodium secretbox, ciphertext
+  versionado `v1:` (rotação futura), `blindIndex()` HMAC-SHA256 normalizado
+  (com/sem máscara ⇒ mesmo índice). Chaves `APP_ENC_KEY`/`APP_BIDX_KEY` no
+  `.env`. (e103c72e)
+- ✅ (a) colunas `cpf_enc`, `cpf_bidx`, `identidade_enc`, `identidade_bidx` +
+  índices em `cadastroministro`. (4864da92)
+- ✅ (b) dual-write em `Ministro.class` (único ponto de escrita ativo).
+- ✅ (c) backfill 3174 linhas, 0 divergências na verificação.
+- ✅ (d) leituras migradas via `Crypto::preencherCampos()` — Ministro.class,
+  6 validar_usuario*, fichas, meus-dados, credencial/ficha/certificado/
+  batismo/listas/9 tesourarias PDFs. Buscas por CPF via `cpf_bidx`
+  (`verificaCpf`, `buscaMembrosAcao`, `cadastrarMembroAcao`) — LIKE parcial
+  de CPF deixou de existir (decisão de projeto); de quebra 2 SQLi eliminados.
+  (ee95d2db, e77a1b6a)
+- ✅ (e) validado pelo usuário em dev (telas + PDFs).
+- ✅ (f) colunas em claro `cpf`/`identidade` DROPADAS + `OPTIMIZE TABLE`;
+  UNIQUE preservado sobre `cpf_bidx`. Roundtrip pós-drop validado. (87253dfe)
 
-    Arquitetura (não quebra sistema):
+Não cifrado campo a campo (decisão mantida): nomes, datas de filtro, chaves
+de junção, endereço/telefone — protegidos pela Fase 2 + controle de acesso.
 
-    1. Nova classe classes/Crypto.php — libsodium (sodium_crypto_secretbox) ou defuse/php-encryption via Composer. Métodos: encrypt(), decrypt(), blindIndex().
-    2. Blind index para busca: coluna cpf_bidx = HMAC-SHA256(cpf, chave_index). Busca por CPF vira WHERE cpf_bidx = ? — busca exata continua funcionando; LIKE em CPF não
-    (aceitável).
-    3. Migração sem downtime, por tabela:
-      - a. adicionar colunas cpf_enc VARBINARY, cpf_bidx CHAR(64) (coluna antiga fica);
-      - b. dual-write: gravações escrevem nas duas;
-      - c. backfill em lotes via script CLI;
-      - d. trocar leituras para _enc (poucos pontos: Ministro.class.php, fichas, credencial PDF, meus-dados/);
-      - e. validar relatórios/PDFs (credencial, ficha ministro, matrícula EBD);
-      - f. zerar e dropar coluna antiga.
-    4. Gestão de chaves: chave mestra em .env/arquivo fora do webroot, permissão 400; nunca no banco nem no git. Prever rotação (versionar chave no prefixo do ciphertext —
+## Fase 4 — Direitos do titular ⬜ PENDENTE
 
-defuse
-já faz).
+Bloqueada por decisões do responsável:
+1. Encarregado (DPO): nome/contato para publicar (art. 41).
+2. Prazos de retenção: membro desligado, mensagens internas, logs
+   (sugestão logs: 6 meses — Marco Civil art. 15).
+3. Textos: política de privacidade + termo de consentimento (rascunho pode
+   ser gerado para revisão).
 
-    O que NÃO criptografar campo a campo: chaves primárias, campos de junção, datas usadas em filtros de relatório, nomes (busca/ordenação em listagens como listarMembros.php
-    quebraria). Nome protegido pela camada 2 (fase 2) + controle de acesso.
+Entregas: exportar dados em `meus-dados/` (art. 18 V), correção, rotina de
+anonimização de desligados pós-retenção, registro de aceite (data/IP/versão
+do termo), página do DPO.
 
-    Fase 4 — Direitos do titular
+## Fase 5 — Auditoria e incidentes ⬜ PENDENTE
 
-    - meus-dados/ já existe → estender: exportar dados (portabilidade, art. 18 V), solicitar correção.
-    - Exclusão/anonimização: rotina que anonimiza membro desligado após prazo de retenção (manter registros eclesiásticos exigidos por estatuto = base legal, documentar).
-    - Consentimento: termo no cadastro + registro de aceite (data, IP, versão do termo).
-    - Política de privacidade publicada; página de contato do encarregado (DPO).
+- Tabela `auditoria_acesso` (quem viu ficha/CPF de quem, quando).
+- Revisão de retenção de logs (`log/`, `logs/`, `error_log`).
+- Procedimento de notificação à ANPD (art. 48).
 
-    Fase 5 — Auditoria e resposta a incidentes
+## Pendências gerais
 
-    - Log de acesso a dados pessoais (quem visualizou ficha/CPF de quem, quando) — tabela auditoria_acesso.
-    - Retenção de logs sem dados pessoais em claro (hoje log/ e error_log merecem revisão).
-    - Procedimento de notificação de incidente à ANPD (art. 48).
-
-    Ordem de execução sugerida
-
-    ┌─────┬─────────────────────────────────────────────┬────────────────────────────────┬─────────────┐
-    │  #  │                    Item                     │       Risco pro sistema        │   Esforço   │
-    ├─────┼─────────────────────────────────────────────┼────────────────────────────────┼─────────────┤
-    │ 1   │ Fase 0 (credenciais, md5, sessão, webroot)  │ baixo                          │ 1-2 dias    │
-    ├─────┼─────────────────────────────────────────────┼────────────────────────────────┼─────────────┤
-    │ 2   │ Fase 2 (InnoDB encryption + backup cifrado) │ quase nulo                     │ 1 dia       │
-    ├─────┼─────────────────────────────────────────────┼────────────────────────────────┼─────────────┤
-    │ 3   │ Fase 1 (inventário)                         │ nenhum                         │ paralelo    │
-    ├─────┼─────────────────────────────────────────────┼────────────────────────────────┼─────────────┤
-    │ 4   │ Fase 3 (CPF/RG cifrados + blind index)      │ médio, mitigado por dual-write │ 1-2 semanas │
-    ├─────┼─────────────────────────────────────────────┼────────────────────────────────┼─────────────┤
-    │ 5   │ Fases 4-5                                   │ baixo                          │ incremental │
-    └─────┴─────────────────────────────────────────────┴────────────────────────────────┴─────────────┘
-
-    Ponto-chave: criptografia transparente (fase 2) resolve "dados no banco cifrados" pra maior parte da LGPD sem tocar em código; criptografia por campo (fase 3) fica restrita
-
-a
-CPF/RG com blind index pra não quebrar buscas.
-
-    Quer que eu comece? Sugiro Fase 0 item 1 (.env no Connect.php) — maior ganho, menor risco.
-
-● Começar Fase 0 item 1: Connect.php lê .env. Ler contexto primeiro.
+- ⬜ Deploy produção: subir `.env.sisconiecp` + chaves acima do webroot;
+  rodar na ordem: `fase3_migrar_colunas` → `fase3_backfill` → deploy código →
+  validar → `fase3_drop_colunas_claras --confirmo` (com backup antes).
+- ⬜ Purgar 338 PDFs pessoais do histórico git (`git filter-repo`).
+- ⬜ Renomear fotos para não usar CPF como nome de arquivo.
+- ⬜ Coluna `cadastroministro.senha` (hash legado, sem uso no código): zerar/dropar.
+- ⬜ Remover `Ministro_nova.class.php` e `classes/app/` (tentativa antiga, sem uso).
+- ⬜ Merge da branch `lgpd` em `main`.
