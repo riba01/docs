@@ -80,7 +80,7 @@ pelo cliente**. Nesse cenário:
 ## Status
 
 - [x] Manifest + cnf do keyring criados (local)
-- [ ] Restart do MySQL (manual, admin)
+- [x] Restart do MySQL (manual, admin)
 - [ ] `ativar_criptografia_tabelas.php` executado
 - [ ] `default_table_encryption=ON` + redo/undo/binlog no my.ini
 - [ ] Rotina de backup cifrado agendada (Task Scheduler / cron)

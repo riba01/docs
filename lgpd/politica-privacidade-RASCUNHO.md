@@ -2,7 +2,8 @@
 
 > **RASCUNHO para revisão do responsável.** Campos entre colchetes exigem
 > decisão/preenchimento: `[RAZÃO SOCIAL]`, `[CNPJ]`, `[ENDEREÇO]`,
-> `[DPO_NOME]`, `[DPO_CONTATO]`, `[PRAZO_DESLIGADO]`, `[PRAZO_MENSAGENS]`.
+> `[DPO_NOME]`, `[DPO_CONTATO]`. Prazos definidos em 15/07/2026:
+> desligados = 5 anos; mensagens internas = 2 anos.
 > Recomenda-se revisão jurídica antes da publicação.
 
 **Última atualização:** [DATA DE PUBLICAÇÃO] — versão 1.0
@@ -68,8 +69,8 @@ de operador, limitado ao necessário para o funcionamento do sistema.
 | Dado | Prazo |
 |---|---|
 | Cadastro de membro ativo | Enquanto durar o vínculo |
-| Membro desligado | **[PRAZO_DESLIGADO]** após o desligamento; depois, anonimização |
-| Mensagens internas | **[PRAZO_MENSAGENS]** |
+| Membro desligado | **5 anos** após o desligamento (prazo prescricional cível); depois, anonimização |
+| Mensagens internas | **2 anos** |
 | Registros de acesso (logs) | 6 meses (Marco Civil, art. 15) |
 | Registros de auditoria de acesso a dados | 6 meses |
 

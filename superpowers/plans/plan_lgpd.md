@@ -42,9 +42,12 @@ classificação por coluna, bases legais, decisões da Fase 3, pendências.
   `scripts/lgpd/backup_cifrado.sh|.ps1`; executado (D:\backups_swga); chave em
   `C:\wamp64\keyring\swga_backup.key` (cópia offline obrigatória).
 - Guia: `docs/lgpd/criptografia-em-repouso.md`.
-- ⬜ Pendente: `default_table_encryption=ON` + redo/undo/binlog no my.ini;
-  agendar backup (Task Scheduler/cron); produção compartilhada não permite
-  keyring — pedir declaração de storage cifrado ao provedor.
+- ✅ (15/07/2026) `default_table_encryption=ON` + `innodb_redo_log_encrypt=ON`
+  + `innodb_undo_log_encrypt=ON` ativados via SET GLOBAL e persistidos no
+  my.ini (binlog desativado — log_bin=OFF, encryption não se aplica).
+- ✅ Backup agendado (Task Scheduler diário 02:00) + purgas semanais.
+- ⬜ Produção compartilhada não permite keyring — pedir declaração de
+  storage cifrado ao provedor.
 
 ## Fase 3 — Criptografia de campo (CPF/RG) ✅ CONCLUÍDA (dev)
 
@@ -57,7 +60,7 @@ classificação por coluna, bases legais, decisões da Fase 3, pendências.
 - ✅ (b) dual-write em `Ministro.class` (único ponto de escrita ativo).
 - ✅ (c) backfill 3174 linhas, 0 divergências na verificação.
 - ✅ (d) leituras migradas via `Crypto::preencherCampos()` — Ministro.class,
-  6 validar_usuario*, fichas, meus-dados, credencial/ficha/certificado/
+  6 validar_usuario\*, fichas, meus-dados, credencial/ficha/certificado/
   batismo/listas/9 tesourarias PDFs. Buscas por CPF via `cpf_bidx`
   (`verificaCpf`, `buscaMembrosAcao`, `cadastrarMembroAcao`) — LIKE parcial
   de CPF deixou de existir (decisão de projeto); de quebra 2 SQLi eliminados.
@@ -69,20 +72,24 @@ classificação por coluna, bases legais, decisões da Fase 3, pendências.
 Não cifrado campo a campo (decisão mantida): nomes, datas de filtro, chaves
 de junção, endereço/telefone — protegidos pela Fase 2 + controle de acesso.
 
-## Fase 4 — Direitos do titular 🔶 EM ANDAMENTO
+## Fase 4 — Direitos do titular ✅ CONCLUÍDA (dev; DPO pendente)
 
-- ✅ Rascunhos gerados para revisão (15/07/2026):
-  `docs/lgpd/politica-privacidade-RASCUNHO.md` e
-  `docs/lgpd/termo-consentimento-RASCUNHO.md` — placeholders [DPO_*],
-  [PRAZO_*], [RAZÃO SOCIAL] aguardam decisões abaixo.
-- ⬜ Bloqueada por decisões do responsável:
-  1. Encarregado (DPO): nome/contato para publicar (art. 41).
-  2. Prazos de retenção: membro desligado, mensagens internas, logs
-     (sugestão logs: 6 meses — Marco Civil art. 15).
-  3. Aprovação dos textos (revisão jurídica recomendada).
-- ⬜ Entregas: exportar dados em `meus-dados/` (art. 18 V), correção, rotina
-  de anonimização de desligados pós-retenção, registro de aceite
-  (data/IP/versão do termo — tabela `aceite_termo`), página do DPO.
+- ✅ Prazos definidos (15/07/2026): desligados 5 anos; mensagens 2 anos;
+  logs 6 meses. Textos atualizados.
+- ✅ Registro de aceite: `classes/TermoConsentimento.php` + tabela
+  `aceite_termo` (rm, versão, IP, UA; UNIQUE rm+versão; cifrada), tela
+  `aceite-termo.php`, gate em `painel.php` (bump em VERSAO força novo
+  aceite). Validado em runtime.
+- ✅ Páginas públicas: `politica-privacidade.php` e `encarregado.php` (DPO).
+- ✅ Exportação (art. 18 V): `meus-dados/exportarDados.php` — JSON com
+  cadastro decifrado + históricos + registros de acesso; botão em Meus
+  Dados; acesso auditado. Correção já existia (meus-dados edita).
+- ✅ Anonimização: `scripts/lgpd/anonimizar_desligados.php` (dry-run padrão,
+  --confirmo executa; 1296 candidatos no dry-run de 15/07/2026 — EXECUÇÃO
+  EM MASSA AGUARDA DECISÃO do responsável; agendar mensal depois).
+- ⬜ ÚNICO PENDENTE: nome/contato do DPO — substituir [DPO_NOME]/
+  [DPO_CONTATO] em encarregado.php, politica-privacidade.php e docs/lgpd/*.
+  Revisão jurídica dos textos recomendada.
 
 ## Fase 5 — Auditoria e incidentes 🔶 EM ANDAMENTO
 
@@ -96,19 +103,29 @@ de junção, endereço/telefone — protegidos pela Fase 2 + controle de acesso.
 - ✅ Purga: `scripts/lgpd/purgar_auditoria.php` (padrão 6 meses) — agendar.
 - ✅ Revisão de retenção de logs: `docs/lgpd/retencao-logs.md` (inventário
   arquivo+banco, política proposta de 6 meses, pendências).
-- ⬜ Purga análoga para `user_sessions`/`registro_atividade`.
-- ⬜ Procedimento de notificação à ANPD (art. 48).
-- ⬜ Validar em runtime (MySQL parado durante a implementação).
+- ✅ Purga de logs de acesso: `scripts/lgpd/purgar_logs_acesso.php`
+  (user_sessions, registro_atividade, registrovisita, user_login + arquivos)
+  — executado 15/07/2026: 95.606 registros antigos removidos.
+- ✅ Procedimento ANPD: `docs/lgpd/procedimento-incidentes-anpd.md`
+  (Res. CD/ANPD 15/2024, prazo 3 dias úteis, passo a passo, contatos).
+- ✅ Validado em runtime (auditoria_acesso e aceite_termo criadas cifradas;
+  insert/select OK).
+- ✅ Agendado (Task Scheduler): backup cifrado diário 02:00
+  (`backup_diario.cmd`; openssl resolvido; chave canônica
+  `C:\wamp64\keyring\swga_backup.key`; restauração testada) e purgas
+  semanais dom 03:00 (`purgas_semanais.cmd`).
 
 ## Pendências gerais
 
 - ⬜ Deploy produção: subir `.env.sisconiecp` + chaves acima do webroot;
   rodar na ordem: `fase3_migrar_colunas` → `fase3_backfill` → deploy código →
   validar → `fase3_drop_colunas_claras --confirmo` (com backup antes).
-- ⬜ Purgar 338 PDFs pessoais do histórico git (`git filter-repo`).
-- ⬜ Renomear fotos para não usar CPF como nome de arquivo.
-- 🔶 Coluna `cadastroministro.senha` (hash legado, sem uso no código):
-  script pronto (`scripts/lgpd/dropar_coluna_senha_cadastroministro.php
-  --confirmo`) — rodar com MySQL ativo.
+- 🔶 Purgar 338 PDFs pessoais do histórico git (`git filter-repo`) — em
+  execução 15/07/2026.
+- ✅ Fotos renomeadas (15/07/2026): 2182 referenciadas → `img_<uniqid>.<ext>`
+  + coluna atualizada; 331 órfãs → `orfao_<uniqid>`; 0 nomes com CPF/dados
+  restantes (`scripts/lgpd/renomear_fotos.php`). rm=573 tinha referência a
+  arquivo inexistente — foto zerada.
+- ✅ Coluna `cadastroministro.senha` zerada e DROPADA + OPTIMIZE (15/07/2026).
 - ✅ Removidos `Ministro_nova.class.php` e `classes/app/` (15/07/2026).
-- ⬜ Merge da branch `lgpd` em `main`.
+- ⬜ Merge da branch `lgpd` em `main` (após filter-repo).
