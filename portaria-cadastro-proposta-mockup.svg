@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1080" viewBox="0 0 1440 1080" role="img" aria-labelledby="title desc">
+  <title id="title">Proposta de interface para cadastro de portaria</title>
+  <desc id="desc">Mockup desktop com navegação lateral, cabeçalho institucional, etapas do cadastro, editores e ações de rascunho e ativação.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="4" stdDeviation="10" flood-color="#0f172a" flood-opacity=".10"/></filter>
+    <style>
+      .sans { font-family: 'Source Sans 3', Arial, sans-serif; } .display { font-family: 'Readex Pro', Arial, sans-serif; }
+      .tiny { font-size: 12px; } .small { font-size: 14px; } .body { font-size: 16px; } .label { font-size: 13px; font-weight: 700; letter-spacing: .04em; } .h1 { font-size: 29px; font-weight: 700; } .h2 { font-size: 18px; font-weight: 700; }
+    </style>
+  </defs>
+  <rect width="1440" height="1080" fill="#f1f5f9"/>
+  <rect width="1440" height="72" fill="#030368"/>
+  <circle cx="46" cy="36" r="22" fill="#ffffff" fill-opacity=".13" stroke="#ffffff" stroke-opacity=".35"/>
+  <text x="37" y="43" class="display" font-size="16" font-weight="700" fill="#ffffff">C</text>
+  <text x="82" y="31" class="display" font-size="16" font-weight="700" letter-spacing="1.6" fill="#ffffff">CONIECP</text>
+  <text x="82" y="48" class="sans tiny" fill="#dbeafe">Convenção das Igrejas Evangélicas</text>
+  <text x="1130" y="31" class="sans small" fill="#ffffff">Área administrativa</text>
+  <text x="1130" y="49" class="sans tiny" fill="#dbeafe">Nome do usuário  •  Sair</text>
+
+  <rect y="72" width="236" height="1008" fill="#ffffff"/>
+  <text x="28" y="112" class="sans label" fill="#64748b">DOCUMENTOS</text>
+  <rect x="12" y="127" width="212" height="44" rx="8" fill="#e8efff"/>
+  <rect x="26" y="141" width="16" height="16" rx="3" fill="#173b8f"/>
+  <text x="56" y="155" class="sans body" font-weight="700" fill="#173b8f">Portarias</text>
+  <text x="28" y="208" class="sans body" fill="#475569">Consultar portarias</text>
+  <text x="28" y="246" class="sans body" fill="#475569">Ofícios</text>
+  <text x="28" y="284" class="sans body" fill="#475569">Editais</text>
+  <text x="28" y="322" class="sans body" fill="#475569">Circulares</text>
+  <line x1="24" y1="356" x2="212" y2="356" stroke="#e2e8f0"/>
+  <text x="28" y="392" class="sans small" fill="#64748b">Ajuda e suporte</text>
+
+  <text x="280" y="112" class="sans small" fill="#64748b">Documentos  /  Portarias  /  Nova portaria</text>
+  <text x="280" y="155" class="display h1" fill="#0f172a">Cadastrar portaria</text>
+  <text x="280" y="181" class="sans body" fill="#475569">Elabore, salve como rascunho e ative o documento quando estiver pronto.</text>
+  <rect x="1135" y="127" width="150" height="38" rx="7" fill="#ffffff" stroke="#cbd5e1"/>
+  <text x="1160" y="151" class="sans small" font-weight="700" fill="#334155">← Voltar</text>
+
+  <rect x="280" y="213" width="1004" height="74" rx="10" fill="#fff8df" stroke="#f1c95b"/>
+  <rect x="302" y="233" width="16" height="16" rx="8" fill="#b45309"/>
+  <text x="334" y="240" class="sans h2" fill="#78350f">Rascunho</text>
+  <text x="334" y="263" class="sans small" fill="#92400e">O conteúdo pode ser alterado antes da ativação e da assinatura eletrônica.</text>
+  <text x="1160" y="251" class="sans small" font-weight="700" fill="#92400e">Data: 09/08/2026</text>
+
+  <rect x="280" y="303" width="1004" height="554" rx="12" fill="#ffffff" filter="url(#shadow)"/>
+  <text x="312" y="345" class="sans h2" fill="#0f172a">Conteúdo da portaria</text>
+  <text x="312" y="368" class="sans small" fill="#64748b">Preencha os campos abaixo. A validação aparece antes da ativação.</text>
+  <line x1="312" y1="390" x2="1252" y2="390" stroke="#e2e8f0"/>
+
+  <text x="312" y="425" class="sans label" fill="#334155">EMBASAMENTO ESTATUTÁRIO</text>
+  <text x="1116" y="425" class="sans tiny" fill="#64748b">mínimo 20 caracteres</text>
+  <rect x="312" y="438" width="940" height="146" rx="8" fill="#ffffff" stroke="#94a3b8"/>
+  <rect x="313" y="439" width="938" height="36" rx="7" fill="#f8fafc"/>
+  <text x="330" y="462" class="sans small" font-weight="700" fill="#334155">↶  ↷  |  B  I  U  |  Alinhar  |  Lista</text>
+  <text x="330" y="508" class="sans body" fill="#334155">O PRESIDENTE DA CONIECP, no uso de suas atribuições estatutárias, RESOLVE:</text>
+
+  <text x="312" y="625" class="sans label" fill="#334155">TEXTO DA PORTARIA</text>
+  <text x="1137" y="625" class="sans tiny" fill="#64748b">mínimo 10 caracteres</text>
+  <rect x="312" y="638" width="940" height="160" rx="8" fill="#ffffff" stroke="#94a3b8"/>
+  <rect x="313" y="639" width="938" height="36" rx="7" fill="#f8fafc"/>
+  <text x="330" y="662" class="sans small" font-weight="700" fill="#334155">↶  ↷  |  B  I  U  |  Alinhar  |  Lista</text>
+  <text x="330" y="712" class="sans body" fill="#94a3b8">Digite o texto da portaria…</text>
+
+  <rect x="280" y="873" width="1004" height="126" rx="12" fill="#ffffff" filter="url(#shadow)"/>
+  <text x="312" y="912" class="sans h2" fill="#0f172a">Assinatura</text>
+  <text x="312" y="935" class="sans small" fill="#64748b">A ativação só pode ser confirmada pelo próprio assinador.</text>
+  <text x="700" y="901" class="sans label" fill="#334155">QUEM ASSINARÁ</text>
+  <rect x="700" y="914" width="552" height="46" rx="7" fill="#ffffff" stroke="#94a3b8"/>
+  <text x="716" y="943" class="sans body" fill="#64748b">Selecione quem vai assinar o documento</text>
+  <text x="1227" y="943" class="sans body" fill="#334155">⌄</text>
+
+  <rect x="236" y="1016" width="1204" height="64" fill="#ffffff"/>
+  <line x1="236" y1="1016" x2="1440" y2="1016" stroke="#cbd5e1"/>
+  <text x="280" y="1049" class="sans small" fill="#64748b">Alterações ainda não salvas</text>
+  <rect x="803" y="1024" width="142" height="40" rx="7" fill="#ffffff" stroke="#64748b"/>
+  <text x="828" y="1049" class="sans small" font-weight="700" fill="#334155">Cancelar</text>
+  <rect x="957" y="1024" width="173" height="40" rx="7" fill="#e2e8f0"/>
+  <text x="982" y="1049" class="sans small" font-weight="700" fill="#334155">Salvar rascunho</text>
+  <rect x="1142" y="1024" width="142" height="40" rx="7" fill="#166534"/>
+  <text x="1176" y="1049" class="sans small" font-weight="700" fill="#ffffff">Ativar</text>
+</svg>
