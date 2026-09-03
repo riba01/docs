@@ -2847,23 +2847,13 @@ Report only validations that actually occurred.
 When multiple technically valid solutions exist, prefer the solution that:
 
 1. preserves or strengthens existing security;
-
 2. follows the repository's established secure abstractions;
-
 3. applies the relevant OWASP Proactive Controls;
-
 4. minimizes attack surface;
-
 5. denies unauthorized behavior by default;
-
 6. exposes the minimum necessary data and functionality;
-
 7. remains compatible with PHP 8.5+ and the production MySQL 5.7 / Percona environment;
-
 8. does not require unsafe-inline, unsafe-eval, weakened CSP, unrestricted CORS, disabled TLS verification, or bypassed validation;
-
 9. remains focused and minimally disruptive.
-
-A functional workaround is not acceptable when it requires weakening an existing security control.
-
-Security must be treated as a system property across architecture, backend, frontend, database, dependencies, configuration, logging, and integrations.
+   A functional workaround is not acceptable when it requires weakening an existing security control.
+   Security must be treated as a system property across architecture, backend, frontend, database, dependencies, configuration, logging, and integrations.
