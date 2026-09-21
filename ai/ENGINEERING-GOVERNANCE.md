@@ -1356,6 +1356,23 @@ Sensitive forms should avoid autocomplete behaviors that create security risk, b
 
 ---
 
+# 44.1 Incremental Multi-Selection Filters
+
+For compact list and directory filters that must accumulate multiple values, do not use a native `<select multiple>` when it requires operating-system modifier keys such as Ctrl/Cmd or produces an unclear selection state.
+
+Prefer the following interaction pattern:
+
+- use a regular select to add one filter criterion at a time;
+- reset the select to its placeholder immediately after a valid choice is added;
+- show every active criterion as a visible, individually removable chip below or adjacent to the filter controls;
+- update the displayed results immediately when a criterion is added or removed;
+- provide a clear action that removes all active criteria and restores the default result set;
+- make the chip label identify its filter category when the value alone can be ambiguous, for example `Cargo: Pastor` or `Função: Secretário`.
+
+Filtering semantics must be explicit and consistent: selected values in the same category normally form an OR condition, while distinct categories normally form an AND condition. Deviations require a clear user-facing explanation.
+
+---
+
 # 45. Tables
 
 Tables must remain readable and accessible.
