@@ -101,10 +101,14 @@ Todas com parâmetros ligados, somas no banco, filtros por intervalo de `ano`/`m
 | `registradoConiecp(int $anoIni, int $anoFim): array` | `[idIecp|'nao_identificado'][ano][mes] => valor` + status CONIECP por `[ano][mes]` |
 | `declaradoIecp(int $anoIni, int $anoFim): array` | `[idIecp][ano][mes] => valor`, já em mês CONIECP |
 | `devidoArrecadacao(int $anoIni, int $anoFim): array` | idem, 15% |
-| `situacoes(int $anoIni, int $anoFim): array` | status dos balancetes para `Pagamento15Regras::situacao` |
+| `statusBalancetes(int $anoIni, int $anoFim): array` | status dos balancetes para `Pagamento15Regras::situacao` |
 | `lancamentos(int $idIecp, int $ano, int $mes): array` | itens dos dois lados para o detalhamento |
 
 `anoIni/anoFim` são anos CONIECP; o método converte para a janela de origem da IECP (dez/(anoIni−1) a nov/anoFim).
+
+### 5.2.1 `classes/Pagamento15Relatorio.php` (puro)
+
+Recebe os arrays de `Pagamento15` e o "hoje" (ano e mês correntes) e monta os payloads de `dadosMensal`, `dadosHistorico` e `dadosLancamentos` (células, totais, resumo, avisos, indicadores, notas, título/totais/leitura do detalhamento). Separado das consultas para ser testado sem banco.
 
 ### 5.3 Endpoints (`coniecp/tesouraria/reuniao_dados/api/`)
 
@@ -181,7 +185,7 @@ O modo só muda o seletor de IECP (CONIECP: todas + "Todas as IECPs"; IECP: fixo
 
 - Título: IECP, mês CONIECP e mês de referência IECP.
 - Coluna **CONIECP**: data, descrição, valor, status do balancete, e como a IECP foi identificada.
-- Coluna **IECP**, agrupada por **Sede** e por **Congregação**: mês do balancete, data, descrição, valor, status, **comprovante** ("Ver recibo" abre no visualizador existente; senão "sem comprovante").
+- Coluna **IECP**, agrupada por **Sede** e por **Congregação**: mês do balancete, data, descrição, valor, status, **comprovante** ("Ver recibo" abre a imagem do recibo, do mesmo local usado pela consulta de balancete, em nova aba; senão "sem comprovante").
 - Rodapé: totais, diferença e leitura neutra:
 
 | Caso | Leitura |
@@ -226,7 +230,7 @@ Se o ano tiver célula provisória, a nota acrescenta "(valores provisórios)".
 
 1. `tests/pagamento15/pagamento15_regras_test.php` — sem banco: deslocamento de mês (dez→jan do ano seguinte, nov→dez), inverso, precedência de situação, extração de CNPJ, tolerância de R$ 0,01, `pior`.
 2. `tests/pagamento15/pagamento15_consultas_test.php` — `sisconiecp_test` com tabelas `TEMPORARY` e `PDO` injetado (padrão de `tests/portaria/README.md`). Cenários: IECP com congregação; IECP que começa no meio da janela (caso Jardim Aliança 2); item com `idIecp = 0` identificado por CNPJ histórico; item não identificável vai para `nao_identificado`; grupos 32 e 34 fora do devido; IECP 15 excluída; item datado fora do mês do balancete cai no mês do balancete; balancete com `mes` vazio ignorado.
-3. `tests/pagamento15/pagamento15_acesso_test.php` — usuário IECP pedindo outra IECP → 403; sem CSRF → 403; ano/mês inválidos → 422; GET → 405.
+3. Acesso: a regra (`Pagamento15Regras::resolverIecp`, `validarAno`, `validarMes`) é testada em `pagamento15_regras_test.php`; o mapeamento HTTP (sem sessão → 401, sem CSRF → 403, IECP alheia → 403, ano/mês inválidos → 422, GET → 405) é verificado contra os endpoints reais (curl sem sessão e console do navegador logado). Também `tests/pagamento15/pagamento15_relatorio_test.php` para a montagem dos payloads.
 4. `tests/pagamento15/pagamento15_conferencia.php` — somente leitura na base real: compara totais novos × lógica antiga e falha se sobrar diferença fora da lista de casos conhecidos (seção 9).
 5. `php -l` em todos os PHP novos/alterados; `node --check` no JS.
 
