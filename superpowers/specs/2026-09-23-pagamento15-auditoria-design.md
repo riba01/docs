@@ -45,6 +45,8 @@ Visões de um lado só usam só aquele lado: a visão CONIECP (①) considera ap
 
 Valores são sempre mostrados, mesmo provisórios; a situação acompanha o valor.
 
+**Comparável (decisão do usuário, 2026-09-23, após a avaliação visual):** um mês é comparável quando sua situação é `provisorio` ou `definitivo`. Nas visões de diferença (Comparação, Registrado × declarado, Registrado × devido), mês não comparável mostra "aguardando" em vez de diferença, sem cor de alerta. Diferenças, "IECPs com divergência", "anos com divergência", "maior diferença", notas por ano e gráficos consideram só meses comparáveis; os totais de registrado/declarado/devido continuam integrais. Período sem mês comparável recebe a nota "Aguardando lançamento".
+
 ## 4. Dados
 
 ### 4.1 Tabela nova `iecp_cnpj_historico`
@@ -163,8 +165,8 @@ O modo só muda o seletor de IECP (CONIECP: todas + "Todas as IECPs"; IECP: fixo
 
 ### 6.1 Estrutura
 
-1. Título, filtros **IECP** e **Ano**, botão **Limpar**. Carrega ao mudar filtro (sem "Aplicar"). O seletor de ano sempre mostra o ano efetivamente carregado.
-2. **Avisos** de período (ex.: "CONIECP: mar–dez/2025 em elaboração — valores provisórios").
+1. Título, filtros **IECP** e **Ano**, botão **Limpar**. Carrega ao mudar filtro (sem "Aplicar"). O seletor de ano sempre mostra o ano efetivamente carregado. **Ano padrão** (abertura e "Limpar"): o último ano com balancete da CONIECP.
+2. **Avisos** de período (ex.: "CONIECP: mar–dez/2025 em elaboração — valores provisórios") e a contagem de balancetes da IECP (sede e congregações) do ano ainda não finalizados pela CONIECP.
 3. **Indicadores do ano:** Registrado CONIECP · Declarado IECPs · Diferença (C − I) · Devido (15% arrecadação) · Diferença (C − devido) · IECPs com divergência. Se houver, "Registrado sem IECP identificada". "IECPs com divergência" = quantidade de IECPs com ao menos um mês não-`futuro` em que `registrado − declarado` é divergente (regra 7); "períodos divergentes" do histórico usa a mesma regra por ano.
 4. **Abas:** "Ano {A}" e "Histórico {anoIni}–{anoFim}".
    - Ano — visões: **Comparação** (padrão), **Registrado CONIECP** (①), **Declarado IECP** (②), **15% da arrecadação** (⑤).
