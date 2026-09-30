@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Acrescentar ao portão as etapas `integrity-read` (44 checagens só-leitura no banco local, comparadas com uma linha de base) e `integrity-write` (regras de gravação reais exercidas em tabelas `TEMPORARY` do `sisconiecp_test`), mais testes unitários do `ReciboArquivo` e do catálogo.
+**Goal:** Acrescentar ao portão as etapas `integrity-read` (44 checagens SQL só-leitura no banco local, mais CPF, comparadas com uma linha de base) e `integrity-write` (regras de gravação reais exercidas em tabelas `TEMPORARY` do `sisconiecp_test`), mais testes unitários do `ReciboArquivo` e do catálogo.
 
 **Architecture:** Um catálogo único de consultas (`Tests\Support\Integridade\Checagens`) devolve, para cada checagem, os ids que violam a regra. A suíte `integrity-read` abre o banco local por uma conexão que recusa usuário com permissão de escrita e liga `READ ONLY` na sessão; reprova só quando a contagem passa da linha de base (`tests/Integrity/baseline.json`). A suíte `integrity-write` clona a estrutura real das tabelas para tabelas `TEMPORARY` no `sisconiecp_test` e troca, só durante o teste, a conexão do singleton `Classes\Connect`, para exercitar as classes de produção sem tocar no banco local.
 
@@ -29,7 +29,8 @@
 
 - `tipoContabil`: `1` = receita, `2` = despesa (totais de congregação e CONIECP batem 100% com essa leitura).
 - `saldo` do balancete é acumulado do mês anterior: só `totalReceitas`/`totalDespesas` são comparados com os itens.
-- 245 balancetes de IECP finalizados, todos entre 2012 e 2021 e todos com itens, têm total diferente da soma dos itens (~R$ 757 mil de diferença absoluta nas receitas). A partir de 2022: zero.
+- Balancete de IECP: o total gravado é o dos itens próprios **ou** o consolidado (itens próprios + `totalReceitas`/`totalDespesas` dos balancetes de congregação da mesma IECP no mesmo mês). Verificado em 2012–2026, todos os status: só o balancete #1 (06/2012, IECP 2, sem congregações) foge das duas regras — gravado menor que os itens (receita −513,00; despesa −186,30). Rascunhos (`Em Elaboracao`) ainda não têm total recalculado e ficam de fora.
+- Nenhum balancete de IECP chega a `Finalizado` desde 2022 (últimos: 139 em 2021); por isso as checagens contábeis olham todo status exceto rascunho, não só `Finalizado`.
 - `autenticador_doc.doc_pdf` guarda o PDF no banco; `SHA2(doc_pdf, 256)` bate com `pdf_sha256` nos 389 documentos.
 - `statusministro` tem chave `idStatusMembro`.
 - Não há coluna cifrada (`*_enc`) no schema local: a checagem "campo cifrado sem texto puro" do spec não se aplica a este banco (ver Task 4).
@@ -374,21 +375,28 @@ final class Checagens
                 'SELECT g.idCongregacao FROM congregacao g LEFT JOIN iecp i ON i.idIecp = g.idIecp WHERE i.idIecp IS NULL'
             ),
 
-            // Contábil (tipoContabil 1 = receita, 2 = despesa; saldo é acumulado e fica de fora)
-            'totais_iecp_ate_2021' => self::c(
-                'Balancete de IECP finalizado (até 2021) com total diferente da soma dos itens',
-                self::totais('balancete', 'idBalancete', 'itembalancete', 'idBalancete', 'AND b.ano <= 2021')
-            ),
-            'totais_iecp_desde_2022' => self::c(
-                'Balancete de IECP finalizado (2022 em diante) com total diferente da soma dos itens',
-                self::totais('balancete', 'idBalancete', 'itembalancete', 'idBalancete', 'AND b.ano >= 2022')
+            // Contábil (tipoContabil 1 = receita, 2 = despesa; saldo é acumulado e fica de fora).
+            // Rascunho ('Em Elaboracao') fica de fora: o total só é recalculado ao enviar.
+            // IECP: o total gravado é o dos itens próprios OU o consolidado com os balancetes
+            // das congregações da IECP no mesmo mês (análise de 2026-09-30, 2012–2026).
+            'totais_iecp' => self::c(
+                'Balancete de IECP com total diferente dos itens e do consolidado com as congregações do mês',
+                "SELECT b.idBalancete FROM balancete b LEFT JOIN ("
+                . 'SELECT idBalancete AS id, SUM(CASE WHEN tipoContabil = 1 THEN valor ELSE 0 END) AS r, '
+                . 'SUM(CASE WHEN tipoContabil = 2 THEN valor ELSE 0 END) AS d FROM itembalancete GROUP BY idBalancete'
+                . ') s ON s.id = b.idBalancete LEFT JOIN ('
+                . 'SELECT idIecp, mes, ano, SUM(totalReceitas) AS r, SUM(totalDespesas) AS d FROM balancete_congregacao GROUP BY idIecp, mes, ano'
+                . ') c ON c.idIecp = b.idIecp AND c.mes = b.mes AND c.ano = b.ano '
+                . "WHERE b.statusBalancete <> 'Em Elaboracao' "
+                . 'AND NOT (ABS(b.totalReceitas - IFNULL(s.r, 0)) <= 0.01 AND ABS(b.totalDespesas - IFNULL(s.d, 0)) <= 0.01) '
+                . 'AND NOT (ABS(b.totalReceitas - IFNULL(s.r, 0) - IFNULL(c.r, 0)) <= 0.01 AND ABS(b.totalDespesas - IFNULL(s.d, 0) - IFNULL(c.d, 0)) <= 0.01)'
             ),
             'totais_congregacao' => self::c(
-                'Balancete de congregação finalizado com total diferente da soma dos itens',
+                'Balancete de congregação (não rascunho) com total diferente da soma dos itens',
                 self::totais('balancete_congregacao', 'idBalancete_Congregacao', 'itembalancete_congregacao', 'idBalancete_Congregacao')
             ),
             'totais_coniecp' => self::c(
-                'Balancete da CONIECP finalizado com total diferente da soma dos itens',
+                'Balancete da CONIECP (não rascunho) com total diferente da soma dos itens',
                 self::totais('balancete_coniecp', 'idBalanceteConiecp', 'itembalancete_coniecp', 'idBalanceteConiecp')
             ),
             'balancete_iecp_finalizado_sem_itens' => self::c(
@@ -476,12 +484,12 @@ final class Checagens
         return ['descricao' => $descricao, 'sql' => $sql];
     }
 
-    private static function totais(string $balancete, string $pk, string $itens, string $fk, string $filtro = ''): string
+    private static function totais(string $balancete, string $pk, string $itens, string $fk): string
     {
         return "SELECT b.{$pk} FROM {$balancete} b LEFT JOIN ("
             . "SELECT {$fk} AS id, SUM(CASE WHEN tipoContabil = 1 THEN valor ELSE 0 END) AS r, "
             . "SUM(CASE WHEN tipoContabil = 2 THEN valor ELSE 0 END) AS d FROM {$itens} GROUP BY {$fk}"
-            . ") s ON s.id = b.{$pk} WHERE b.statusBalancete = 'Finalizado' {$filtro} "
+            . ") s ON s.id = b.{$pk} WHERE b.statusBalancete <> 'Em Elaboracao' "
             . 'AND (ABS(b.totalReceitas - IFNULL(s.r, 0)) > 0.01 OR ABS(b.totalDespesas - IFNULL(s.d, 0)) > 0.01)';
     }
 
@@ -658,7 +666,7 @@ Criar `tests/Integrity/baseline.json` com o conteúdo `{}` (preenchido na Task 3
 - [ ] **Step 6: Rodar e confirmar que passa**
 
 Run: `php vendor/bin/phpunit --testsuite unit --filter "CatalogoTest|ConexaoLeituraTest|AmbienteTest" --colors=never`
-Expected: `OK` (45 checagens × 2 + 3 + 5 + 2 = 100 testes).
+Expected: `OK` (44 checagens × 2 + 3 + 5 + 2 = 98 testes).
 
 - [ ] **Step 7: Commit**
 
@@ -911,14 +919,14 @@ historicopunicao_sem_ministro 3
 login_sem_ministro 1
 matricula_turma_sem_matricula 1046
 ministro_status_inexistente 1
-totais_iecp_ate_2021 245
+totais_iecp 1
 balancete_iecp_finalizado_sem_itens 6
 balancete_congregacao_finalizado_sem_itens 43
 oficio_iecp_numero_duplicado 1
 ministro_cpf_invalido 7
 ```
 
-As demais 32 checagens SQL passam com zero. Se `setUpBeforeClass` falhar com "GATE_LOCAL_READ_USER pode alterar", pare e relate ao humano: as permissões mudaram.
+As demais 31 checagens SQL passam com zero. Se `setUpBeforeClass` falhar com "GATE_LOCAL_READ_USER pode alterar", pare e relate ao humano: as permissões mudaram.
 
 - [ ] **Step 4: Gravar a linha de base**
 
@@ -939,14 +947,14 @@ As demais 32 checagens SQL passam com zero. Se `setUpBeforeClass` falhar com "GA
     "ministro_status_inexistente": 1,
     "oficio_iecp_numero_duplicado": 1,
     "recibo_iecp_sem_item": 1,
-    "totais_iecp_ate_2021": 245
+    "totais_iecp": 1
 }
 ```
 
 - [ ] **Step 5: Rodar (GREEN)**
 
 Run: `php vendor/bin/phpunit --testsuite integrity-read --colors=never`
-Expected: `OK (46 tests, 46 assertions)`.
+Expected: `OK (45 tests, 45 assertions)`.
 
 Run: `php vendor/bin/phpunit --testsuite unit --filter CatalogoTest --colors=never`
 Expected: `OK` (a linha de base só contém checagens conhecidas).
@@ -975,13 +983,13 @@ Atualizar o comentário acima de `$semServidor` para: `// Ordem de execução. P
 - [ ] **Step 7: Rodar a etapa pelo portão**
 
 Run: `php tests/gate.php --suite=integrity-read; echo "exit=$?"`
-Expected: `PASSOU preflight — Apache e MySQL respondendo (...)`, `PASSOU integrity-read — 46 teste(s): 46 passaram, 0 pulados`, `APROVADO`, `exit=0`. (Com WAMP desligado: `ABORTOU preflight` e `exit=2`.)
+Expected: `PASSOU preflight — Apache e MySQL respondendo (...)`, `PASSOU integrity-read — 45 teste(s): 45 passaram, 0 pulados`, `APROVADO`, `exit=0`. (Com WAMP desligado: `ABORTOU preflight` e `exit=2`.)
 
 - [ ] **Step 8: Commit**
 
 ```bash
 git add phpunit.xml tests/gate.php tests/Integrity/baseline.json tests/Integrity/Read/ConsistenciaTest.php
-git commit -F <mensagem: "test: suíte integrity-read com 45 checagens e linha de base">
+git commit -F <mensagem: "test: suíte integrity-read com 44 checagens e linha de base">
 ```
 
 ---
@@ -1416,7 +1424,7 @@ git commit -F <mensagem: "test: suíte integrity-write com recibos em cascata e 
 ````markdown
 ## Integridade dos dados
 
-- `integrity-read`: 45 checagens só-leitura no banco local (`tests/Support/Integridade/Checagens.php`)
+- `integrity-read`: 44 checagens só-leitura no banco local (`tests/Support/Integridade/Checagens.php`)
   mais CPF inválido. A conexão recusa usuário com INSERT/UPDATE/DELETE/DROP/ALTER/FILE/SUPER/ALL e liga
   `READ ONLY` na sessão.
 - `integrity-write`: exercita classes reais em tabelas `TEMPORARY` do `sisconiecp_test`, clonadas da
@@ -1443,7 +1451,7 @@ git commit -F <mensagem: "docs: integridade dos dados e linha de base no README 
 
 - [ ] **Step 4: Relatar ao humano os achados de dados**
 
-Listar a tabela da linha de base (Task 3, Step 4) com uma frase por item, destacando: os 245 totais divergentes de IECP (2012–2021, ~R$ 757 mil em receitas) e as 1.046 matrículas de turma EBD órfãs. Nenhuma correção de dados neste plano.
+Listar a tabela da linha de base (Task 3, Step 4) com uma frase por item, destacando: o balancete de IECP #1 (06/2012) com total menor que os itens, nenhum balancete de IECP finalizado desde 2022, e as 1.046 matrículas de turma EBD órfãs. Nenhuma correção de dados neste plano.
 
 ---
 
