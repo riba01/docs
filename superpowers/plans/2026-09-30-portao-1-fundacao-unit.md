@@ -188,9 +188,10 @@ Require all denied
 # Host obrigatoriamente localhost ou 127.0.0.1.
 GATE_BASE_URL=http://localhost/sisconiecp2
 
-# Banco local (cópia de trabalho). Usuário de leitura: somente SELECT.
+# Banco local (cópia de trabalho). Leitura com o usuário de testes já existente;
+# ele precisa de SELECT em conie847_sisconiecp (ver tests/README.md).
 GATE_LOCAL_DSN=mysql:host=localhost;dbname=conie847_sisconiecp;charset=utf8mb4
-GATE_LOCAL_READ_USER=gate_leitura
+GATE_LOCAL_READ_USER=sisconiecp_test
 GATE_LOCAL_READ_PASSWORD=
 
 # Usuário de escrita usado apenas pelas contas de teste (Plano 2).
@@ -199,7 +200,7 @@ GATE_LOCAL_WRITE_PASSWORD=
 
 # Banco descartável dos testes de escrita (mesma convenção de tests/portaria/README.md).
 SISCONIECP_TEST_DSN=mysql:host=localhost;dbname=sisconiecp_test;charset=utf8mb4
-SISCONIECP_TEST_DB_USER=
+SISCONIECP_TEST_DB_USER=sisconiecp_test
 SISCONIECP_TEST_DB_PASSWORD=
 ```
 
@@ -3508,7 +3509,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 
 **Interfaces:**
 - Consumes: `tests/gate.php` (Task 8).
-- Produces: documentação de uso; usuário `gate_leitura` que os Planos 2 e 3 usam.
+- Produces: documentação de uso; permissão `SELECT` de `sisconiecp_test@localhost` em `conie847_sisconiecp`, usada pelos Planos 2 e 3.
 
 - [ ] **Step 1: Escrever `tests/README.md`**
 
@@ -3527,15 +3528,22 @@ Saída: `0` aprovado, `1` reprovado, `2` pré-requisito ausente. Relatório em `
 
 ## Configuração (uma vez)
 
-1. Copie `tests/.env.example` para `tests/.env.local` e preencha.
-2. No MySQL local, como root, crie o usuário de leitura:
+1. Copie `tests/.env.example` para `tests/.env.local` e preencha a senha do usuário `sisconiecp_test@localhost` nos dois lugares (`GATE_LOCAL_READ_PASSWORD` e `SISCONIECP_TEST_DB_PASSWORD`).
+2. O mesmo usuário lê o banco local. Confira no MySQL, como root:
 
 ```sql
-CREATE USER 'gate_leitura'@'localhost' IDENTIFIED BY 'troque-esta-senha';
-GRANT SELECT ON conie847_sisconiecp.* TO 'gate_leitura'@'localhost';
+SHOW GRANTS FOR 'sisconiecp_test'@'localhost';
 ```
 
-3. Para os legados de banco (`tests/portaria`, `tests/pagamento15`), siga `tests/portaria/README.md` (banco `sisconiecp_test`).
+Se não aparecer `SELECT` em `conie847_sisconiecp`, conceda **só leitura**:
+
+```sql
+GRANT SELECT ON conie847_sisconiecp.* TO 'sisconiecp_test'@'localhost';
+```
+
+Nunca conceda INSERT/UPDATE/DELETE em `conie847_sisconiecp` a este usuário: os testes de `tests/portaria` e `tests/pagamento15` confiam que ele só escreve em `sisconiecp_test`.
+
+3. Para os legados de banco (`tests/portaria`, `tests/pagamento15`), veja também `tests/portaria/README.md`.
 
 ## Falhas conhecidas
 
@@ -3550,9 +3558,9 @@ Nunca adicione entrada sem motivo: o portão recusa carregar.
 - Script avulso antigo (`*_test.php|js|py`): roda sozinho; use exit 2 para "ambiente não configurado".
 ````
 
-- [ ] **Step 2: (Humano) criar o usuário de leitura e o `tests/.env.local`**
+- [ ] **Step 2: (Humano) conferir permissão de leitura e preencher o `tests/.env.local`**
 
-Peça ao humano para executar o SQL do README como root e preencher `tests/.env.local` (`GATE_BASE_URL`, `GATE_LOCAL_*` e, se já existir o banco `sisconiecp_test`, `SISCONIECP_TEST_*`). O agente não cria usuários MySQL. O Plano 1 ainda não usa `GATE_LOCAL_*` (nenhuma etapa exige servidor); o usuário fica pronto para os Planos 2 e 3.
+Decisão do humano (2026-09-30): usar o usuário existente `sisconiecp_test@localhost` também para a leitura do banco local, em vez de criar `gate_leitura`. Peça ao humano para rodar `SHOW GRANTS` do README, conceder só `SELECT` em `conie847_sisconiecp` se faltar, e preencher a senha em `tests/.env.local`. O agente não altera permissões MySQL nem lê senhas. O Plano 1 ainda não usa `GATE_LOCAL_*` (nenhuma etapa exige servidor); a permissão fica pronta para os Planos 2 e 3.
 
 - [ ] **Step 3: Verificar que o `.env.local` chega aos legados**
 
