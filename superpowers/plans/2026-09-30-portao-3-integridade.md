@@ -6,7 +6,7 @@
 
 **Architecture:** Um catálogo único de consultas (`Tests\Support\Integridade\Checagens`) devolve, para cada checagem, os ids que violam a regra. A suíte `integrity-read` abre o banco local por uma conexão que recusa usuário com permissão de escrita e liga `READ ONLY` na sessão; reprova só quando a contagem passa da linha de base (`tests/Integrity/baseline.json`). A suíte `integrity-write` clona a estrutura real das tabelas para tabelas `TEMPORARY` no `sisconiecp_test` e troca, só durante o teste, a conexão do singleton `Classes\Connect`, para exercitar as classes de produção sem tocar no banco local.
 
-**Tech Stack:** PHP 8.4 CLI, PHPUnit 13.2, MySQL 5.7.44 (WAMP), PDO.
+**Tech Stack:** PHP 8.5 CLI, PHPUnit 13.2, MySQL 5.7.44 (WAMP), PDO.
 
 **Spec:** `docs/superpowers/specs/2026-09-30-testes-seguranca-integridade-design.md` (seção 6)
 
@@ -49,25 +49,26 @@
 
 ## Estrutura de arquivos
 
-| Arquivo | Responsabilidade |
-|---|---|
-| `tests/Support/Integridade/Checagens.php` | catálogo: id → descrição + SQL que devolve os ids violadores |
-| `tests/Support/Integridade/LinhaBase.php` | lê `tests/Integrity/baseline.json` |
-| `tests/Support/Integridade/Ambiente.php` | carrega `tests/.env.local` ou falha |
-| `tests/Support/Integridade/ConexaoLeitura.php` | PDO do banco local que recusa usuário com escrita e liga READ ONLY |
-| `tests/Support/Integridade/BancoTeste.php` | PDO do `sisconiecp_test`, clonagem para `TEMPORARY`, troca do singleton `Connect` |
-| `tests/Integrity/baseline.json` | contagens aceitas por checagem |
-| `tests/Integrity/Read/ConsistenciaTest.php` | roda o catálogo + CPF |
-| `tests/Integrity/Write/ReciboExclusaoTest.php` | exclusão em cascata dos 3 tipos de recibo |
-| `tests/Integrity/Write/TextoUtf8Test.php` | texto com acento/emoji gravado e relido idêntico |
-| `tests/Unit/Integridade/*Test.php` | testes sem banco dos itens acima + `ReciboArquivo` |
-| `phpunit.xml`, `tests/gate.php`, `tests/README.md` | registrar as suítes |
+| Arquivo                                            | Responsabilidade                                                                  |
+| -------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `tests/Support/Integridade/Checagens.php`          | catálogo: id → descrição + SQL que devolve os ids violadores                      |
+| `tests/Support/Integridade/LinhaBase.php`          | lê `tests/Integrity/baseline.json`                                                |
+| `tests/Support/Integridade/Ambiente.php`           | carrega `tests/.env.local` ou falha                                               |
+| `tests/Support/Integridade/ConexaoLeitura.php`     | PDO do banco local que recusa usuário com escrita e liga READ ONLY                |
+| `tests/Support/Integridade/BancoTeste.php`         | PDO do `sisconiecp_test`, clonagem para `TEMPORARY`, troca do singleton `Connect` |
+| `tests/Integrity/baseline.json`                    | contagens aceitas por checagem                                                    |
+| `tests/Integrity/Read/ConsistenciaTest.php`        | roda o catálogo + CPF                                                             |
+| `tests/Integrity/Write/ReciboExclusaoTest.php`     | exclusão em cascata dos 3 tipos de recibo                                         |
+| `tests/Integrity/Write/TextoUtf8Test.php`          | texto com acento/emoji gravado e relido idêntico                                  |
+| `tests/Unit/Integridade/*Test.php`                 | testes sem banco dos itens acima + `ReciboArquivo`                                |
+| `phpunit.xml`, `tests/gate.php`, `tests/README.md` | registrar as suítes                                                               |
 
 ---
 
 ### Task 1: Catálogo, linha de base, ambiente e conexão só-leitura
 
 **Files:**
+
 - Create: `tests/Support/Integridade/Checagens.php`
 - Create: `tests/Support/Integridade/LinhaBase.php`
 - Create: `tests/Support/Integridade/Ambiente.php`
@@ -78,13 +79,14 @@
 - Test: `tests/Unit/Integridade/AmbienteTest.php`
 
 **Interfaces:**
+
 - Consumes: `Tests\Support\Env` (Plano 1): `carregar(string): Env`, `exigir(string): string`, `get(string): ?string`.
 - Produces:
-  - `Checagens::todas(): array<string, array{descricao: string, sql: string}>`
-  - `Checagens::IDS_PHP` (const `list<string>`): checagens feitas em PHP, fora do SQL — hoje `['ministro_cpf_invalido']`.
-  - `LinhaBase::carregar(string $arquivo): LinhaBase` (lança `RuntimeException` se JSON inválido ou valor não inteiro ≥ 0); `LinhaBase::deArray(array): LinhaBase`; `->aceito(string $id): int` (0 se ausente); `->ids(): list<string>`.
-  - `Ambiente::env(?string $arquivo = null): Env` (padrão `SISCONIECP_RAIZ . '/tests/.env.local'`; lança `RuntimeException` se ausente).
-  - `ConexaoLeitura::abrir(Env $env): PDO` (FETCH_ASSOC; lança `RuntimeException` se o usuário tem escrita no banco); `ConexaoLeitura::permissoesDeEscrita(list<string> $grants, string $banco): list<string>`.
+    - `Checagens::todas(): array<string, array{descricao: string, sql: string}>`
+    - `Checagens::IDS_PHP` (const `list<string>`): checagens feitas em PHP, fora do SQL — hoje `['ministro_cpf_invalido']`.
+    - `LinhaBase::carregar(string $arquivo): LinhaBase` (lança `RuntimeException` se JSON inválido ou valor não inteiro ≥ 0); `LinhaBase::deArray(array): LinhaBase`; `->aceito(string $id): int` (0 se ausente); `->ids(): list<string>`.
+    - `Ambiente::env(?string $arquivo = null): Env` (padrão `SISCONIECP_RAIZ . '/tests/.env.local'`; lança `RuntimeException` se ausente).
+    - `ConexaoLeitura::abrir(Env $env): PDO` (FETCH_ASSOC; lança `RuntimeException` se o usuário tem escrita no banco); `ConexaoLeitura::permissoesDeEscrita(list<string> $grants, string $banco): list<string>`.
 
 - [ ] **Step 1: Criar o branch**
 
@@ -680,9 +682,11 @@ git commit -F <mensagem: "test: catálogo de integridade, linha de base e conex�
 ### Task 2: `ReciboArquivo` não apaga fora da pasta de recibos
 
 **Files:**
+
 - Test: `tests/Unit/Integridade/ReciboArquivoTest.php`
 
 **Interfaces:**
+
 - Consumes: `ReciboArquivo::remover(?string $local): bool` (classe global em `classes/ReciboArquivo.php`): `$local` é relativo a `iecp/tesouraria/balanceteMensal/`, precisa começar com `recibos/`, extensão `jpg|jpeg|png|webp`; devolve `true` só se apagou.
 - Produces: nada.
 
@@ -802,12 +806,14 @@ git commit -F <mensagem: "test: ReciboArquivo só apaga dentro da pasta de recib
 ### Task 3: Suíte `integrity-read` e linha de base
 
 **Files:**
+
 - Modify: `phpunit.xml` (nova testsuite)
 - Modify: `tests/gate.php` (nova etapa e prefixo)
 - Modify: `tests/Integrity/baseline.json`
 - Test: `tests/Integrity/Read/ConsistenciaTest.php`
 
 **Interfaces:**
+
 - Consumes: `Checagens::todas()`, `Checagens::IDS_PHP`, `LinhaBase::carregar()/aceito()`, `Ambiente::env()`, `ConexaoLeitura::abrir()` (Task 1); `ValidarCpf->validar($cpf)` devolve `0` válido / `1` inválido (Plano 1); `EtapaPhpUnit(string $raiz, string $suite, Allowlist $allowlist)` (Plano 1).
 - Produces: suíte PHPUnit `integrity-read`; etapa `integrity-read` no `gate.php`, prefixo `Tests\Integrity\Read\`.
 
@@ -997,6 +1003,7 @@ git commit -F <mensagem: "test: suíte integrity-read com 44 checagens e linha d
 ### Task 4: Suíte `integrity-write` (recibos em cascata e texto UTF-8)
 
 **Files:**
+
 - Create: `tests/Support/Integridade/BancoTeste.php`
 - Modify: `phpunit.xml` (nova testsuite)
 - Modify: `tests/gate.php` (nova etapa e prefixo)
@@ -1005,14 +1012,15 @@ git commit -F <mensagem: "test: suíte integrity-read com 44 checagens e linha d
 - Test: `tests/Integrity/Write/TextoUtf8Test.php`
 
 **Interfaces:**
+
 - Consumes: `Ambiente::env()` (Task 1); `Classes\Connect` (propriedade privada estática `$instance`, `PDO|null`); `Recibo_iecp`, `Recibo_congregacao`, `Recibo_coniecp` → `excluirPorItem(int $idItem_balancete): bool` (apagam a linha do recibo e chamam `ReciboArquivo::remover($local)`).
 - Produces:
-  - `BancoTeste::abrir(Env $env): PDO` (FETCH_OBJ, como `Connect`; lança se o banco não for `sisconiecp_test`)
-  - `BancoTeste::garantirBancoDeTeste(string $banco): void`
-  - `BancoTeste::bancoDeOrigem(Env $env): string` (dbname de `GATE_LOCAL_DSN`)
-  - `BancoTeste::clonar(PDO $pdo, string $origem, list<string> $tabelas): void` (`CREATE TEMPORARY TABLE t LIKE origem.t`)
-  - `BancoTeste::linhaMinima(PDO $pdo, string $tabela, array<string, scalar> $valores): void` (preenche colunas NOT NULL sem default)
-  - `BancoTeste::usarComoConexaoDoSistema(?PDO $pdo): ?PDO` (devolve a anterior)
+    - `BancoTeste::abrir(Env $env): PDO` (FETCH_OBJ, como `Connect`; lança se o banco não for `sisconiecp_test`)
+    - `BancoTeste::garantirBancoDeTeste(string $banco): void`
+    - `BancoTeste::bancoDeOrigem(Env $env): string` (dbname de `GATE_LOCAL_DSN`)
+    - `BancoTeste::clonar(PDO $pdo, string $origem, list<string> $tabelas): void` (`CREATE TEMPORARY TABLE t LIKE origem.t`)
+    - `BancoTeste::linhaMinima(PDO $pdo, string $tabela, array<string, scalar> $valores): void` (preenche colunas NOT NULL sem default)
+    - `BancoTeste::usarComoConexaoDoSistema(?PDO $pdo): ?PDO` (devolve a anterior)
 
 Ruling do spec §6b: "valor negativo recusado", "dupla submissão" e "rollback multi-tabela" vivem em handlers procedurais (`incluirReceita.php`, `incluirDespesa.php`) sem classe que receba conexão; pelo próprio spec ("Onde a regra vive em handler procedural sem classe injetável, o teste correspondente vai para o grupo HTTP"), ficam para o Plano 2. "Campo cifrado sem texto puro" não se aplica: o schema local não tem colunas `*_enc` (a cifra em si é coberta por `CryptoTest`). Valores não positivos já gravados são vigiados por `item_valor_nao_positivo` (Task 1).
 
@@ -1413,15 +1421,17 @@ git commit -F <mensagem: "test: suíte integrity-write com recibos em cascata e 
 ### Task 5: Documentação e relatório dos achados
 
 **Files:**
+
 - Modify: `tests/README.md`
 
 **Interfaces:**
+
 - Consumes: tudo acima.
 - Produces: documentação.
 
 - [ ] **Step 1: Acrescentar ao `tests/README.md`, antes de "## Falhas conhecidas"**
 
-````markdown
+```markdown
 ## Integridade dos dados
 
 - `integrity-read`: 44 checagens só-leitura no banco local (`tests/Support/Integridade/Checagens.php`)
@@ -1435,7 +1445,7 @@ git commit -F <mensagem: "test: suíte integrity-write com recibos em cascata e 
 Sujeira antiga aceita por checagem. A etapa reprova só quando uma contagem **aumenta**.
 Depois de limpar dados, reduza o número à mão — senão a folga esconde regressões futuras
 até o valor antigo. Checagem nova entra com 0 (não precisa estar no arquivo).
-````
+```
 
 - [ ] **Step 2: Rodar o portão completo**
 
@@ -1457,13 +1467,13 @@ Listar a tabela da linha de base (Task 3, Step 4) com uma frase por item, destac
 
 ## Cobertura do spec neste plano
 
-| Spec §6 | Onde |
-|---|---|
-| 6a leitura, usuário só SELECT, zero linhas = íntegro, até 20 ids | Tasks 1, 3 |
-| 6a órfãos, referências, contábil, unicidade, formato, autenticador | Task 1 (catálogo) |
-| 6a linha de base, reprova só se aumentar | Tasks 1, 3 |
-| 6b recibo excluído junto com o item (c061a5a1) | Task 4 |
-| 6b texto com acento/emoji relido idêntico | Task 4 (+ checagem de charset na Task 1) |
-| 6b valor negativo, dupla submissão, rollback | Plano 2 (HTTP), por regra do próprio spec — ruling na Task 4 |
-| 6b campo cifrado sem texto puro | não aplicável ao schema local — ruling na Task 4 |
-| §9 etapas no relatório do `gate.php` | Tasks 3, 4 |
+| Spec §6                                                            | Onde                                                         |
+| ------------------------------------------------------------------ | ------------------------------------------------------------ |
+| 6a leitura, usuário só SELECT, zero linhas = íntegro, até 20 ids   | Tasks 1, 3                                                   |
+| 6a órfãos, referências, contábil, unicidade, formato, autenticador | Task 1 (catálogo)                                            |
+| 6a linha de base, reprova só se aumentar                           | Tasks 1, 3                                                   |
+| 6b recibo excluído junto com o item (c061a5a1)                     | Task 4                                                       |
+| 6b texto com acento/emoji relido idêntico                          | Task 4 (+ checagem de charset na Task 1)                     |
+| 6b valor negativo, dupla submissão, rollback                       | Plano 2 (HTTP), por regra do próprio spec — ruling na Task 4 |
+| 6b campo cifrado sem texto puro                                    | não aplicável ao schema local — ruling na Task 4             |
+| §9 etapas no relatório do `gate.php`                               | Tasks 3, 4                                                   |

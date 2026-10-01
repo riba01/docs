@@ -6,7 +6,7 @@
 
 **Architecture:** PHPUnit 13 (já em `vendor/bin`) com `phpunit.xml` na raiz e suíte `unit`. Código de apoio em `tests/Support/` sob o namespace `Tests\Support`, carregado por um autoloader próprio em `tests/bootstrap.php` (sem mexer no `composer.json`/`vendor`, que sobem para produção). `tests/gate.php` monta uma lista de etapas (`Etapa`) e um `Runner` executa cada uma isolada, coleta `Resultado`s, cruza falhas com `tests/allowlist.php` e gera o relatório. Planos 2–4 só acrescentam etapas.
 
-**Tech Stack:** PHP 8.4 CLI, PHPUnit 13.2, HTMLPurifier (já no vendor), ext-sodium, ext-dom, ext-simplexml, `proc_open`.
+**Tech Stack:** PHP 8.5 CLI, PHPUnit 13.2, HTMLPurifier (já no vendor), ext-sodium, ext-dom, ext-simplexml, `proc_open`.
 
 **Spec:** `docs/superpowers/specs/2026-09-30-testes-seguranca-integridade-design.md`
 
@@ -16,7 +16,7 @@
 
 ## Global Constraints
 
-- PHP 8.4 CLI; todo arquivo novo começa com `<?php` + `declare(strict_types=1);`.
+- PHP 8.5 CLI; todo arquivo novo começa com `<?php` + `declare(strict_types=1);`.
 - Nenhuma dependência nova no `composer.json`; não rodar `composer dump-autoload` (o `vendor/` sobe manualmente para o HostGator).
 - Nenhum arquivo fora de `tests/`, `phpunit.xml` e `.gitignore` é criado ou alterado. **Código de produção (`classes/`, módulos) não é corrigido neste plano**: teste que reprova por defeito real vira entrada em `tests/allowlist.php` com `motivo` e `desde`, e é relatado ao humano.
 - Todo host HTTP usado por testes deve ser `localhost` ou `127.0.0.1` (spec §1, critérios de sucesso).
@@ -40,27 +40,27 @@
 
 ## Estrutura de arquivos
 
-| Arquivo | Responsabilidade |
-|---|---|
-| `phpunit.xml` | suíte `unit`; planos seguintes acrescentam `http`, `integrity-read`, `integrity-write` |
-| `tests/.htaccess` | nega acesso web à pasta |
-| `tests/.env.example` | modelo das variáveis do portão |
-| `tests/bootstrap.php` | autoload do Composer + autoloader `Tests\` → `tests/` |
-| `tests/Unit/bootstrap.php` | sessão CLI em `tests/out/sessoes` e carga de `StartSecureSession.php` antes de qualquer saída |
-| `tests/allowlist.php` | dados: falhas conhecidas (e, no Plano 2, endpoints públicos) |
-| `tests/Support/Env.php` | leitura de `tests/.env.local`, validação de host local |
-| `tests/Support/Payloads.php` | payloads XSS/SQLi compartilhados + detector DOM de HTML perigoso |
-| `tests/Support/Allowlist.php` | carrega e consulta `tests/allowlist.php` |
-| `tests/Support/JunitReader.php` | converte JUnit do PHPUnit em lista de casos com id estável |
-| `tests/Support/Gate/Falha.php`, `Resultado.php`, `Etapa.php` | tipos do runner |
-| `tests/Support/Gate/Processo.php` | `proc_open` com timeout, saída capturada em arquivo |
-| `tests/Support/Gate/Runner.php` | executa etapas isoladas, calcula código de saída |
-| `tests/Support/Gate/Relatorio.php` | resumo de terminal e `gate-report.md` |
-| `tests/Support/Gate/EtapaPreflight.php`, `EtapaLint.php`, `EtapaPhpUnit.php`, `EtapaLegado.php` | etapas deste plano |
-| `tests/gate.php` | ponto de entrada CLI |
-| `tests/Unit/Support/*Test.php` | testes do próprio portão |
-| `tests/Unit/Security/*Test.php` | classes de segurança |
-| `tests/Unit/Validacao/*Test.php` | CPF, CNPJ, ocultação de CPF |
+| Arquivo                                                                                         | Responsabilidade                                                                              |
+| ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `phpunit.xml`                                                                                   | suíte `unit`; planos seguintes acrescentam `http`, `integrity-read`, `integrity-write`        |
+| `tests/.htaccess`                                                                               | nega acesso web à pasta                                                                       |
+| `tests/.env.example`                                                                            | modelo das variáveis do portão                                                                |
+| `tests/bootstrap.php`                                                                           | autoload do Composer + autoloader `Tests\` → `tests/`                                         |
+| `tests/Unit/bootstrap.php`                                                                      | sessão CLI em `tests/out/sessoes` e carga de `StartSecureSession.php` antes de qualquer saída |
+| `tests/allowlist.php`                                                                           | dados: falhas conhecidas (e, no Plano 2, endpoints públicos)                                  |
+| `tests/Support/Env.php`                                                                         | leitura de `tests/.env.local`, validação de host local                                        |
+| `tests/Support/Payloads.php`                                                                    | payloads XSS/SQLi compartilhados + detector DOM de HTML perigoso                              |
+| `tests/Support/Allowlist.php`                                                                   | carrega e consulta `tests/allowlist.php`                                                      |
+| `tests/Support/JunitReader.php`                                                                 | converte JUnit do PHPUnit em lista de casos com id estável                                    |
+| `tests/Support/Gate/Falha.php`, `Resultado.php`, `Etapa.php`                                    | tipos do runner                                                                               |
+| `tests/Support/Gate/Processo.php`                                                               | `proc_open` com timeout, saída capturada em arquivo                                           |
+| `tests/Support/Gate/Runner.php`                                                                 | executa etapas isoladas, calcula código de saída                                              |
+| `tests/Support/Gate/Relatorio.php`                                                              | resumo de terminal e `gate-report.md`                                                         |
+| `tests/Support/Gate/EtapaPreflight.php`, `EtapaLint.php`, `EtapaPhpUnit.php`, `EtapaLegado.php` | etapas deste plano                                                                            |
+| `tests/gate.php`                                                                                | ponto de entrada CLI                                                                          |
+| `tests/Unit/Support/*Test.php`                                                                  | testes do próprio portão                                                                      |
+| `tests/Unit/Security/*Test.php`                                                                 | classes de segurança                                                                          |
+| `tests/Unit/Validacao/*Test.php`                                                                | CPF, CNPJ, ocultação de CPF                                                                   |
 
 Nota de nome: o spec cita `tests/Support/allowlist.php`. No Windows `allowlist.php` e `Allowlist.php` na mesma pasta são o mesmo arquivo, então os dados ficam em `tests/allowlist.php` e a classe em `tests/Support/Allowlist.php`.
 
@@ -69,6 +69,7 @@ Nota de nome: o spec cita `tests/Support/allowlist.php`. No Windows `allowlist.p
 ### Task 1: Esqueleto PHPUnit e leitura do ambiente de teste
 
 **Files:**
+
 - Create: `phpunit.xml`
 - Create: `tests/.htaccess`
 - Create: `tests/.env.example`
@@ -79,17 +80,18 @@ Nota de nome: o spec cita `tests/Support/allowlist.php`. No Windows `allowlist.p
 - Test: `tests/Unit/Support/EnvTest.php`
 
 **Interfaces:**
+
 - Consumes: nada.
 - Produces:
-  - `Tests\Support\Env::carregar(string $arquivo): Env` (lança `RuntimeException` se o arquivo não existe)
-  - `Tests\Support\Env::deTexto(string $texto): Env`
-  - `Tests\Support\Env::vazio(): Env`
-  - `Env->get(string $chave): ?string` (string vazia vira `null`)
-  - `Env->exigir(string $chave): string` (lança `RuntimeException` com o nome da chave)
-  - `Env->todos(): array<string,string>`
-  - `Env->baseUrl(): string` (sem `/` final; valida host)
-  - `Tests\Support\Env::garantirHostLocal(string $url): void` (lança `RuntimeException`)
-  - Constante `SISCONIECP_RAIZ` (raiz do projeto) definida em `tests/bootstrap.php`
+    - `Tests\Support\Env::carregar(string $arquivo): Env` (lança `RuntimeException` se o arquivo não existe)
+    - `Tests\Support\Env::deTexto(string $texto): Env`
+    - `Tests\Support\Env::vazio(): Env`
+    - `Env->get(string $chave): ?string` (string vazia vira `null`)
+    - `Env->exigir(string $chave): string` (lança `RuntimeException` com o nome da chave)
+    - `Env->todos(): array<string,string>`
+    - `Env->baseUrl(): string` (sem `/` final; valida host)
+    - `Tests\Support\Env::garantirHostLocal(string $url): void` (lança `RuntimeException`)
+    - Constante `SISCONIECP_RAIZ` (raiz do projeto) definida em `tests/bootstrap.php`
 
 - [ ] **Step 1: Criar branch**
 
@@ -453,18 +455,20 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 2: Payloads compartilhados e sanitização de HTML
 
 **Files:**
+
 - Create: `tests/Support/Payloads.php`
 - Test: `tests/Unit/Support/PayloadsTest.php`
 - Test: `tests/Unit/Security/SanitizerTest.php`
 - Test: `tests/Unit/Security/PortariaInputValidatorTest.php`
 
 **Interfaces:**
+
 - Consumes: `tests/bootstrap.php` (Task 1).
 - Produces:
-  - `Tests\Support\Payloads::xss(): array<string,string>` (nome → payload; 31 itens)
-  - `Tests\Support\Payloads::sqli(): array<string,string>` (nome → payload; só leitura/tempo)
-  - `Tests\Support\Payloads::perigos(string $html): list<string>` (lista vazia = HTML seguro)
-  - `Tests\Support\Payloads::comoCasos(array<string,string> $lista): array<string, array{0:string}>` (formato de data provider)
+    - `Tests\Support\Payloads::xss(): array<string,string>` (nome → payload; 31 itens)
+    - `Tests\Support\Payloads::sqli(): array<string,string>` (nome → payload; só leitura/tempo)
+    - `Tests\Support\Payloads::perigos(string $html): list<string>` (lista vazia = HTML seguro)
+    - `Tests\Support\Payloads::comoCasos(array<string,string> $lista): array<string, array{0:string}>` (formato de data provider)
 
 - [ ] **Step 1: Escrever o teste do detector (falha)**
 
@@ -930,11 +934,13 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 3: CSRF, autorização de assinatura e cookie de sessão
 
 **Files:**
+
 - Test: `tests/Unit/Security/CsrfTest.php`
 - Test: `tests/Unit/Security/AssinaturaAutorizacaoTest.php`
 - Test: `tests/Unit/Security/SessaoCookieTest.php`
 
 **Interfaces:**
+
 - Consumes: `Classes\Csrf` (`getToken(): string`, `validateToken(string): bool`, `htmlField(): string`); `Classes\AssinaturaAutorizacao::resolverAssinador(int, int, bool): int` e `::validarCsrf(string): bool`; funções globais `secureSessionCookieParameters(array): array` e `secureSessionName(bool): string` carregadas por `tests/Unit/bootstrap.php`.
 - Produces: nada consumido por outras tasks.
 
@@ -1171,11 +1177,13 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 4: Criptografia, token de redefinição de senha e conteúdo base64
 
 **Files:**
+
 - Test: `tests/Unit/Security/CryptoTest.php`
 - Test: `tests/Unit/Security/PasswordResetTokenTest.php`
 - Test: `tests/Unit/Security/ConteudoBase64Test.php`
 
 **Interfaces:**
+
 - Consumes: `Classes\Crypto` (`encrypt`, `decrypt`, `blindIndex`; chaves via `getenv('APP_ENC_KEY')`/`getenv('APP_BIDX_KEY')`, que têm precedência sobre o `.env` em `Classes\Env::get`); `Classes\PasswordResetToken`; `Classes\ConteudoBase64::decodificarPost(string ...$campos): void`.
 - Produces: nada.
 
@@ -1488,11 +1496,13 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 5: Validação de CPF, CNPJ e ocultação de CPF
 
 **Files:**
+
 - Test: `tests/Unit/Validacao/ValidarCpfTest.php`
 - Test: `tests/Unit/Validacao/ValidarCnpjTest.php`
 - Test: `tests/Unit/Validacao/OcultarCpfTest.php`
 
 **Interfaces:**
+
 - Consumes: `ValidarCpf->validar($cpf)` — **retorna `0` para válido e `1` para inválido** (contrato legado, verificado em 2026-09-30); `ValidarCnpj->validarCnpj(?string): bool` e construtor `new ValidarCnpj(?string)`; função global `ocultarCPF($cpf): string`.
 - Produces: nada.
 
@@ -1685,6 +1695,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 6: Allowlist de falhas conhecidas e leitor de JUnit
 
 **Files:**
+
 - Create: `tests/allowlist.php`
 - Create: `tests/Support/Allowlist.php`
 - Create: `tests/Support/JunitReader.php`
@@ -1692,14 +1703,15 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 - Test: `tests/Unit/Support/JunitReaderTest.php`
 
 **Interfaces:**
+
 - Consumes: nada além do bootstrap.
 - Produces:
-  - `Tests\Support\Allowlist::carregar(string $arquivo): Allowlist` (arquivo ausente = lista vazia; malformado = `RuntimeException`)
-  - `Tests\Support\Allowlist::deArray(array $dados): Allowlist`
-  - `Allowlist->explicar(string $idTeste): ?array{id:string,motivo:string,desde:string}` (padrão `id` aceita `*` como curinga; nenhum outro metacaractere)
-  - `Allowlist->falhasConhecidas(): list<array{id:string,motivo:string,desde:string}>`
-  - `Allowlist->publicos(): list<string>` (chave `publicos` do arquivo; vazia neste plano, usada no Plano 2)
-  - `Tests\Support\JunitReader::ler(string $arquivo): list<array{id:string,status:string,mensagem:string}>` — `status` ∈ `passou|falhou|erro|pulado`; `id` = `Classe\Completa::metodo` ou `Classe\Completa::metodo#nome-do-data-set` (ou `#0` para data set numérico)
+    - `Tests\Support\Allowlist::carregar(string $arquivo): Allowlist` (arquivo ausente = lista vazia; malformado = `RuntimeException`)
+    - `Tests\Support\Allowlist::deArray(array $dados): Allowlist`
+    - `Allowlist->explicar(string $idTeste): ?array{id:string,motivo:string,desde:string}` (padrão `id` aceita `*` como curinga; nenhum outro metacaractere)
+    - `Allowlist->falhasConhecidas(): list<array{id:string,motivo:string,desde:string}>`
+    - `Allowlist->publicos(): list<string>` (chave `publicos` do arquivo; vazia neste plano, usada no Plano 2)
+    - `Tests\Support\JunitReader::ler(string $arquivo): list<array{id:string,status:string,mensagem:string}>` — `status` ∈ `passou|falhou|erro|pulado`; `id` = `Classe\Completa::metodo` ou `Classe\Completa::metodo#nome-do-data-set` (ou `#0` para data set numérico)
 
 - [ ] **Step 1: Escrever os testes**
 
@@ -2075,6 +2087,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 7: Núcleo do runner — processo, resultado, execução e relatório
 
 **Files:**
+
 - Create: `tests/Support/Gate/Falha.php`
 - Create: `tests/Support/Gate/Resultado.php`
 - Create: `tests/Support/Gate/Etapa.php`
@@ -2086,15 +2099,16 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 - Test: `tests/Unit/Support/RelatorioTest.php`
 
 **Interfaces:**
+
 - Consumes: `Tests\Support\Allowlist` (Task 6).
 - Produces:
-  - `Tests\Support\Gate\Falha(string $id, string $mensagem, ?array $conhecida = null)` — propriedades públicas `readonly`; `$conhecida` é a entrada da allowlist quando aplicável.
-  - `Tests\Support\Gate\Resultado(string $etapa, string $status, list<Falha> $falhas = [], string $observacao = '')` — constantes `PASSOU`, `REPROVOU`, `PULOU`, `ABORTOU`; `Resultado::deFalhas(string $etapa, list<Falha> $falhas, string $observacao = ''): Resultado` (REPROVOU se houver falha sem `conhecida`, senão PASSOU).
-  - `interface Tests\Support\Gate\Etapa { public function nome(): string; public function executar(): Resultado; }`
-  - `Tests\Support\Gate\Processo::executar(list<string> $comando, array<string,string> $env = [], ?string $cwd = null, int $timeoutSegundos = 600): array{codigo:int, saida:string, estourou:bool}` — `codigo` 124 quando estoura o tempo; `saida` = stdout seguido de stderr.
-  - `Tests\Support\Gate\Runner(list<Etapa> $etapas)`; `->executar(?callable $aoConcluir = null): list<Resultado>` (callback recebe `Resultado $r, float $segundos`); exceção numa etapa vira `REPROVOU`; `ABORTOU` interrompe as etapas seguintes. `Runner::codigoSaida(list<Resultado>): int` → 2 se algum ABORTOU, 1 se algum REPROVOU, senão 0.
-  - `Tests\Support\Gate\Relatorio::terminal(list<Resultado> $resultados): string`
-  - `Tests\Support\Gate\Relatorio::markdown(list<Resultado> $resultados, Allowlist $allowlist, \DateTimeImmutable $quando): string`
+    - `Tests\Support\Gate\Falha(string $id, string $mensagem, ?array $conhecida = null)` — propriedades públicas `readonly`; `$conhecida` é a entrada da allowlist quando aplicável.
+    - `Tests\Support\Gate\Resultado(string $etapa, string $status, list<Falha> $falhas = [], string $observacao = '')` — constantes `PASSOU`, `REPROVOU`, `PULOU`, `ABORTOU`; `Resultado::deFalhas(string $etapa, list<Falha> $falhas, string $observacao = ''): Resultado` (REPROVOU se houver falha sem `conhecida`, senão PASSOU).
+    - `interface Tests\Support\Gate\Etapa { public function nome(): string; public function executar(): Resultado; }`
+    - `Tests\Support\Gate\Processo::executar(list<string> $comando, array<string,string> $env = [], ?string $cwd = null, int $timeoutSegundos = 600): array{codigo:int, saida:string, estourou:bool}` — `codigo` 124 quando estoura o tempo; `saida` = stdout seguido de stderr.
+    - `Tests\Support\Gate\Runner(list<Etapa> $etapas)`; `->executar(?callable $aoConcluir = null): list<Resultado>` (callback recebe `Resultado $r, float $segundos`); exceção numa etapa vira `REPROVOU`; `ABORTOU` interrompe as etapas seguintes. `Runner::codigoSaida(list<Resultado>): int` → 2 se algum ABORTOU, 1 se algum REPROVOU, senão 0.
+    - `Tests\Support\Gate\Relatorio::terminal(list<Resultado> $resultados): string`
+    - `Tests\Support\Gate\Relatorio::markdown(list<Resultado> $resultados, Allowlist $allowlist, \DateTimeImmutable $quando): string`
 
 - [ ] **Step 1: Escrever os testes**
 
@@ -2553,7 +2567,7 @@ final class Runner
 
 - [ ] **Step 6: Implementar `tests/Support/Gate/Relatorio.php`**
 
-```php
+````php
 <?php
 
 declare(strict_types=1);
@@ -2651,7 +2665,7 @@ final class Relatorio
         return $partes === [] ? '' : ' — ' . implode('; ', $partes);
     }
 }
-```
+````
 
 Nota: "Entradas sem uso" só faz sentido quando todas as etapas rodaram. Com `--suite=` ou `--fast`, entradas de outras suítes aparecem como sem uso; o `gate.php` (Task 8) passa uma allowlist filtrada nesses modos.
 
@@ -2674,6 +2688,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 8: Etapas (pré-requisitos, lint, PHPUnit, legados) e `gate.php`
 
 **Files:**
+
 - Create: `tests/Support/Gate/EtapaPreflight.php`
 - Create: `tests/Support/Gate/EtapaLint.php`
 - Create: `tests/Support/Gate/EtapaPhpUnit.php`
@@ -2685,13 +2700,14 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 - Test: `tests/Unit/Support/EtapaLegadoTest.php`
 
 **Interfaces:**
+
 - Consumes: `Env` (Task 1), `Allowlist`, `JunitReader` (Task 6), `Etapa`, `Resultado`, `Falha`, `Processo`, `Runner`, `Relatorio` (Task 7).
 - Produces (usado pelos Planos 2–4):
-  - `EtapaPreflight(Env $env, bool $arquivoEnvExiste, bool $exigeServidor, ?callable $sondaHttp = null, ?callable $sondaBanco = null)` — `sondaHttp(string $url): int` devolve o status HTTP (0 = sem resposta); `sondaBanco(string $dsn, string $usuario, string $senha): void` lança em falha. Nome `preflight`.
-  - `EtapaLint(string $raiz, ?callable $listarArquivos = null)` — `listarArquivos(): list<string>` devolve caminhos relativos. Nome `lint`.
-  - `EtapaPhpUnit(string $raiz, string $suite, Allowlist $allowlist, array<string,string> $env = [])` — nome = `$suite`; `EtapaPhpUnit::classificar(list<array{id,status,mensagem}> $casos, int $codigo, string $saida, string $suite, Allowlist $allowlist): list<Falha>` (estático, puro).
-  - `EtapaLegado(string $raiz, Env $env, Allowlist $allowlist)` — nome `legado`; `EtapaLegado::descobrir(string $raiz): list<string>` (estático; caminhos relativos com `/`); ids de falha no formato `legado::tests/pasta/arquivo_test.ext`.
-  - `tests/gate.php` — array `$etapas` indexado por nome, na ordem de execução; Planos 2–4 acrescentam entradas.
+    - `EtapaPreflight(Env $env, bool $arquivoEnvExiste, bool $exigeServidor, ?callable $sondaHttp = null, ?callable $sondaBanco = null)` — `sondaHttp(string $url): int` devolve o status HTTP (0 = sem resposta); `sondaBanco(string $dsn, string $usuario, string $senha): void` lança em falha. Nome `preflight`.
+    - `EtapaLint(string $raiz, ?callable $listarArquivos = null)` — `listarArquivos(): list<string>` devolve caminhos relativos. Nome `lint`.
+    - `EtapaPhpUnit(string $raiz, string $suite, Allowlist $allowlist, array<string,string> $env = [])` — nome = `$suite`; `EtapaPhpUnit::classificar(list<array{id,status,mensagem}> $casos, int $codigo, string $saida, string $suite, Allowlist $allowlist): list<Falha>` (estático, puro).
+    - `EtapaLegado(string $raiz, Env $env, Allowlist $allowlist)` — nome `legado`; `EtapaLegado::descobrir(string $raiz): list<string>` (estático; caminhos relativos com `/`); ids de falha no formato `legado::tests/pasta/arquivo_test.ext`.
+    - `tests/gate.php` — array `$etapas` indexado por nome, na ordem de execução; Planos 2–4 acrescentam entradas.
 
 - [ ] **Step 1: Escrever os testes**
 
@@ -3473,6 +3489,7 @@ Se aparecer warning ou deprecation vindo de `classes/`: **não** crie entrada `p
 
 Run: `php tests/gate.php --fast; echo "exit=$?"`
 Expected (formato; números variam):
+
 ```
 PASSOU    preflight — modo sem servidor; tests/.env.local ausente (...) (0.0 s)
 PASSOU    lint — nenhum PHP alterado (0.4 s)
@@ -3482,6 +3499,7 @@ PASSOU    legado — N passaram; M pulado(s) por ambiente: ... (20.0 s)
 APROVADO — relatório: tests/out/gate-report.md
 exit=0
 ```
+
 `unit` deve mostrar `0 nova(s)` e pelo menos 2 conhecidas. `legado` pode reprovar (ver abaixo); nesse caso a última linha é `REPROVADO` e `exit=1`. Abra `tests/out/gate-report.md` e confira que as falhas conhecidas aparecem com motivo.
 
 Se `legado` reprovar: **não** corrija os scripts antigos nem o código de produção. Leia a mensagem no relatório; se o motivo é defeito real já existente, acrescente entrada `legado::tests/...` na allowlist com o motivo e relate ao humano; se é problema do runner (interpretador não encontrado, caminho), corrija `EtapaLegado`.
@@ -3505,9 +3523,11 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 9: Usuário MySQL de leitura e verificação do modo completo (humano + agente)
 
 **Files:**
+
 - Create: `tests/README.md`
 
 **Interfaces:**
+
 - Consumes: `tests/gate.php` (Task 8).
 - Produces: documentação de uso; permissão `SELECT` de `sisconiecp_test@localhost` em `conie847_sisconiecp`, usada pelos Planos 2 e 3.
 
@@ -3582,11 +3602,11 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 
 ## Cobertura do spec neste plano
 
-| Spec | Onde |
-|---|---|
-| §1 critérios: exit 0/1/2, `--fast`, relatório, host local | Tasks 1, 7, 8 |
-| §3 estrutura, `.env.local`, ordem 1–4 e 9, flags | Tasks 1, 7, 8 |
-| §4 validação de segurança (todas as classes da tabela) | Tasks 2–5 |
-| §9 falhas e relatório, `.gitignore` | Tasks 1, 7, 8 |
-| §10 allowlist com motivo e data | Tasks 6, 7 |
+| Spec                                                                | Onde            |
+| ------------------------------------------------------------------- | --------------- |
+| §1 critérios: exit 0/1/2, `--fast`, relatório, host local           | Tasks 1, 7, 8   |
+| §3 estrutura, `.env.local`, ordem 1–4 e 9, flags                    | Tasks 1, 7, 8   |
+| §4 validação de segurança (todas as classes da tabela)              | Tasks 2–5       |
+| §9 falhas e relatório, `.gitignore`                                 | Tasks 1, 7, 8   |
+| §10 allowlist com motivo e data                                     | Tasks 6, 7      |
 | §3 etapas 5–8, §5, §6, §7, §8, §11 (Playwright, usuário de escrita) | Planos 2, 3 e 4 |
