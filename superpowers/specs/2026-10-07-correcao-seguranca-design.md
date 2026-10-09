@@ -280,42 +280,57 @@ Com sessão de teste IECP (contas `TESTE_GATE` do Plano 2a): abrir tela CONIECP 
 
 ## 7. Já correto (não mexer)
 
+- **Exceção mantida (decisão do usuário, 2026-10-09):** `login.php:53` — o e-mail do administrador do sistema, fixo no código, entra também com `idStatusMinistro = 2`. Não remover.
+
 Argon2id em senhas novas; `session_regenerate_id` no login; cookie `__Host-` Secure/HttpOnly/SameSite=Strict; expiração 3 h; sessão invalidada na troca de senha; perfil/nível vindos do banco; redefinição de senha (token 32 bytes, SHA-256, 45 min, uso único, rate limit); páginas públicas sem XSS; HTMLPurifier no TinyMCE; uploads novos (ofício, recibo, foto, capa EBD, `autenticador/comparar.php`); `serve.php` de anexos com regex numérica; HMAC de link de anexo com `hash_equals`; `config/.htaccess` deny; scanners com guarda CLI.
 
-## 8. Andamento (atualizado 2026-10-07, 22:50)
+## 8. Andamento (atualizado 2026-10-09, 11:50)
 
 **No ar e verificado em produção:** Fase 2.1/2.2 (upload e documentos de membro), Fase 1.1/1.2 (portão do painel, `exit` nos validadores), endpoints diretos com `GuardaEndpoint` (transferência, credencial), legados apagados, **portão global** (`classes/PortaoGlobal.php` + `config/portao_global.php`, ativado por `.user.ini` via MultiPHP INI Editor — `php_value` no `.htaccess` não funciona na HostGator). Senha do banco trocada.
 
-### PENDENTE DE ENVIAR À HOSTGATOR — Fase 3, parte 1 (tomada de conta e senhas)
+**No ar em 2026-10-09 (verificado de fora, sem login → 302 para o login; falta conferir logado):** Fase 3 parte 1 (`ConferenciaSenha`, Meus Dados, troca de senha com senha atual); fotos de `Fotos/` só via `serve.php` com sessão (regra também no `.htaccess` da raiz); `classes/IdPost.php` nas consultas de balancete (congregação, IECP, CONIECP); `Balancete::listar` e `alterarSaldo` com consulta preparada.
 
-Pronta local, 760 testes unitários OK; não testada logado (banco local desligado).
-
-Arquivos para subir:
-
-```
-classes/ConferenciaSenha.php
-meus-dados/salvarDadosAcao.php
-meus-dados/verificaSenha.php
-meus-dados/alterarSenhaAntiga/verificaSenha.php
-meus-dados/mudarSenhaAcao.php
-meus-dados/js/mudarSenha.js
-meus-dados/alterarSenha.php
-admin/verificaSenha.php
-admin/mudarSenhaAcao.php
-admin/js/mudarSenha.js
-atualizar_senha.php
-```
-
-Conferir depois de subir:
+Conferir logado (Fase 3 parte 1):
 
 1. Meus Dados: alterar telefone ou endereço e salvar — precisa gravar normalmente.
 2. Alterar senha (Meus Dados → senha): validar a senha atual, definir a nova, conferir que chega só um **aviso** por e-mail (sem a senha); sair e entrar com a senha nova.
 3. Senha atual errada: precisa recusar; na 6ª tentativa seguida aparece "Muitas tentativas…".
 4. Troca obrigatória: com usuário de teste com senha antiga (MD5), entrar e fazer a troca forçada.
 
+### NO AR 2026-10-09 12:25 — Fase 3, parte 2 (login e administração de usuários)
+
+Tabela `login_attempts` criada (local e produção). Verificado de fora: 5 erros com e-mail inexistente → 6ª vai para `erro.php?motivo=limite`; outro e-mail do mesmo IP segue normal. Falta conferir logado (lista abaixo).
+
+Pronta local, 805 testes unitários OK; `login.php` e `cadastrarUsuarioAcao.php` executados de verdade com SQLite (`php -S`), banco MySQL local desligado.
+
+1. **Antes:** rodar `sql/login_attempts.sql` no phpMyAdmin. Sem a tabela o login funciona, mas sem limite (erro no `error_log`).
+2. Subir:
+
+```
+classes/LimiteLogin.php
+classes/NivelAcessoUsuario.php
+classes/PasswordResetActivation.php
+login.php
+erro.php
+meus-dados/cadastrarUsuarioAcao.php
+```
+
+O que muda:
+
+- Login: 5 erros por e-mail ou 20 por IP em 15 min → `erro.php?motivo=limite` ("Muitas tentativas…"), mesmo com a senha certa. Senha certa zera os erros daquele e-mail. E-mail inexistente custa o mesmo tempo de uma senha errada.
+- Conta MD5 que entra com a senha certa tem o hash trocado por Argon2id da mesma senha; `password_updated` continua 0, então a troca obrigatória segue. Outras sessões abertas desse usuário caem uma vez (hash mudou).
+- "Esqueci a senha" troca a senha mas não desbloqueia conta bloqueada pelo administrador.
+- `meus-dados/cadastrarUsuarioAcao.php`: só administrador (IECP ou CONIECP); o endpoint aceitava, por pedido direto fora da tela, que o próprio usuário trocasse a senha **sem a senha atual** (a tela de Meus Dados sempre pediu a senha atual). Admin de IECP recebe 403 ao alterar usuário com nível 1 (CONIECP).
+
+Conferir depois de subir:
+
+1. Entrar normalmente. Errar a senha 5 vezes com um usuário de teste → 6ª tentativa (mesmo certa) mostra "Muitas tentativas"; após 15 min entra.
+2. Usuário MD5 de teste: entra, é levado à troca obrigatória; no phpMyAdmin `login.senha` começa com `$argon2id$` antes mesmo da troca.
+3. Admin IECP: editar senha de usuário da própria IECP funciona; de um diretor CONIECP aparece "Somente a CONIECP pode alterar este usuário."
+4. Conta bloqueada de teste: "esqueci a senha" → redefine → login continua indo para "acesso bloqueado".
+
 ### Próximos
 
-- Fase 3 restante: limite de tentativas no login e conversão automática MD5 → Argon2id ao entrar; "esqueci a senha" não desbloqueia conta bloqueada (`classes/PasswordResetActivation.php`); admin de IECP não redefine senha de usuário CONIECP (`meus-dados/cadastrarUsuarioAcao.php`).
-- Limpeza: órfãos `meus-dados/js/alterarSenha.js` e `meus-dados/verificaSenha.php`.
+- Limpeza: órfãos `meus-dados/js/alterarSenha.js`, `meus-dados/js/mudarSenhaAntiga.js`, `meus-dados/verificaSenha.php`; fotos com CPF no nome (`scripts/lgpd/renomear_fotos.php`).
 - SMTP: mover senha para `config/smtp.php` → trocar a senha no cPanel → limpar histórico do git (`git filter-repo`).
 - Fases 5–9 conforme acima.
