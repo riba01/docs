@@ -281,3 +281,41 @@ Com sessão de teste IECP (contas `TESTE_GATE` do Plano 2a): abrir tela CONIECP 
 ## 7. Já correto (não mexer)
 
 Argon2id em senhas novas; `session_regenerate_id` no login; cookie `__Host-` Secure/HttpOnly/SameSite=Strict; expiração 3 h; sessão invalidada na troca de senha; perfil/nível vindos do banco; redefinição de senha (token 32 bytes, SHA-256, 45 min, uso único, rate limit); páginas públicas sem XSS; HTMLPurifier no TinyMCE; uploads novos (ofício, recibo, foto, capa EBD, `autenticador/comparar.php`); `serve.php` de anexos com regex numérica; HMAC de link de anexo com `hash_equals`; `config/.htaccess` deny; scanners com guarda CLI.
+
+## 8. Andamento (atualizado 2026-10-07, 22:50)
+
+**No ar e verificado em produção:** Fase 2.1/2.2 (upload e documentos de membro), Fase 1.1/1.2 (portão do painel, `exit` nos validadores), endpoints diretos com `GuardaEndpoint` (transferência, credencial), legados apagados, **portão global** (`classes/PortaoGlobal.php` + `config/portao_global.php`, ativado por `.user.ini` via MultiPHP INI Editor — `php_value` no `.htaccess` não funciona na HostGator). Senha do banco trocada.
+
+### PENDENTE DE ENVIAR À HOSTGATOR — Fase 3, parte 1 (tomada de conta e senhas)
+
+Pronta local, 760 testes unitários OK; não testada logado (banco local desligado).
+
+Arquivos para subir:
+
+```
+classes/ConferenciaSenha.php
+meus-dados/salvarDadosAcao.php
+meus-dados/verificaSenha.php
+meus-dados/alterarSenhaAntiga/verificaSenha.php
+meus-dados/mudarSenhaAcao.php
+meus-dados/js/mudarSenha.js
+meus-dados/alterarSenha.php
+admin/verificaSenha.php
+admin/mudarSenhaAcao.php
+admin/js/mudarSenha.js
+atualizar_senha.php
+```
+
+Conferir depois de subir:
+
+1. Meus Dados: alterar telefone ou endereço e salvar — precisa gravar normalmente.
+2. Alterar senha (Meus Dados → senha): validar a senha atual, definir a nova, conferir que chega só um **aviso** por e-mail (sem a senha); sair e entrar com a senha nova.
+3. Senha atual errada: precisa recusar; na 6ª tentativa seguida aparece "Muitas tentativas…".
+4. Troca obrigatória: com usuário de teste com senha antiga (MD5), entrar e fazer a troca forçada.
+
+### Próximos
+
+- Fase 3 restante: limite de tentativas no login e conversão automática MD5 → Argon2id ao entrar; "esqueci a senha" não desbloqueia conta bloqueada (`classes/PasswordResetActivation.php`); admin de IECP não redefine senha de usuário CONIECP (`meus-dados/cadastrarUsuarioAcao.php`).
+- Limpeza: órfãos `meus-dados/js/alterarSenha.js` e `meus-dados/verificaSenha.php`.
+- SMTP: mover senha para `config/smtp.php` → trocar a senha no cPanel → limpar histórico do git (`git filter-repo`).
+- Fases 5–9 conforme acima.
