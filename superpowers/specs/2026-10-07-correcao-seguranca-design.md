@@ -257,6 +257,50 @@ Apagar do repositório **e do servidor** (lista final gerada por script; conferi
 
 Deploy: como o upload é manual, manter `docs/…/apagar-no-servidor.txt` com a lista para o usuário remover no cPanel.
 
+---
+
+### Fase 10 — Varredura completa por classe (recomendação do usuário, 2026-10-09)
+
+As Fases 5, 7 e 8 tratam os pontos **confirmados** na auditoria. Esta fase exige zerar **todas** as ocorrências de cada classe abaixo, não só as listadas. Cada classe ganha teste estático (lista de conhecidos que só pode diminuir, como `tests/Http/conhecidos.json`). Contagens de 2026-10-09 são grep bruto (candidatos, não achados confirmados).
+
+**10.1 Information Exposure — Server Error Message (remover todas)**
+
+- ~243 linhas com `echo`/`print`/`die`/`exit`/`json_encode` de `getMessage()`, `getFile()`, `getLine()`, `getTraceAsString()`. Todas viram `error_log(...)` + mensagem genérica ao usuário (com código de correlação, se útil).
+- Cobrir também: `var_dump`/`print_r` de exceção ou `$stmt->errorInfo()`, `mysqli_error`, mensagens do PDO no `catch` de `classes/` (conexão), saída de erro em PDFs (mPDF/TCPDF) e respostas AJAX.
+- Confirmar `display_errors=Off`, `log_errors=On` em produção (`.user.ini`/cPanel) e páginas de erro genéricas (`ErrorDocument 500`) no `.htaccess` e `backup/.htaccess`.
+- Teste: nenhum `getMessage|getFile|getLine|getTrace` em saída (echo/print/json/die) fora de `error_log`.
+
+**10.2 DOM-based XSS — remover sem quebrar a aplicação**
+
+- ~1.166 sinks em JS próprio (`.html(`, `.append(`, `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`, `eval`) e ~51 fontes (`location.hash/search/href`, `URLSearchParams`, `document.referrer`, `window.name`). Ignorar `*.min.js` de terceiros.
+- Regra: dado vindo de fonte controlável (URL, resposta AJAX com dado de usuário) entra por `.text()`/`textContent`/`.val()`/criação de nó, nunca por HTML concatenado. Onde HTML for necessário (linhas de tabela montadas no JS), escapar cada campo com um helper único (ex.: `escapeHtml()` em `script/`) antes de concatenar.
+- **Não quebrar:** trocar arquivo por arquivo; manter a mesma marcação gerada (só o conteúdo escapado); não trocar `.html()` por `.text()` onde o valor é HTML legítimo gerado pelo próprio código (ícones, botões); testar cada tela no navegador (listagens, modais, datatables, selects dinâmicos) antes de subir. Priorizar sinks alimentados por fonte de URL e por campos livres (nome, observação, motivo).
+- Resultado esperado: permitir remover `'unsafe-inline'`/`eval` da CSP (ver plano CSP).
+
+**10.3 SQL Injection — todas as possibilidades**
+
+- Além dos 25 pontos da Fase 5: todo SQL com variável concatenada/interpolada (`"... $var"`, `'... ' . $var`) em `query()`, `exec()`, `prepare()`, incluindo `ORDER BY`/`LIMIT`/nome de coluna/tabela (usar lista branca), `IN (...)` (gerar placeholders), `LIKE` (placeholder com `%` no valor) e SQL montado em `classes/`.
+- Cobrir valores vindos de sessão, cookie, cabeçalho e banco (segunda ordem), não só `$_GET/$_POST`.
+- Teste estático: nenhum `query(`/`exec(`/`prepare(` com `$` interpolado ou `.` concatenando variável fora de lista branca.
+
+**10.4 Cross-site Scripting (XSS) — todas as possibilidades**
+
+- Refletido, armazenado (Fase 7) e DOM (10.2). Toda saída de dado em HTML via `htmlspecialchars(..., ENT_QUOTES, 'UTF-8')`; em atributo, sempre entre aspas; em JS embutido, `json_encode` com `JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT`; em URL, `rawurlencode`.
+- Conferir `<textarea>`, `value="..."`, `title`, `data-*`, `href`, `onclick` montado com dado, PDFs gerados com HTML (mPDF interpreta tags) e e-mails HTML.
+- Teste estático: nenhum `<?= $` / `echo $` de dado sem helper de escape.
+
+**10.5 Server-Side Request Forgery (SSRF)**
+
+- ~28 candidatos: `file_get_contents`, `curl_init`, `fopen`, `getimagesize`, `copy`, `simplexml_load_file` com variável. Para cada: se o destino pode vir do usuário (URL de imagem, webhook, CEP/API externa), usar lista branca de host, só `https`, bloquear IP privado/loopback/metadados (`127.0.0.0/8`, `10/8`, `172.16/12`, `192.168/16`, `169.254/16`, `::1`), desligar redirecionamento e definir timeout. Se for caminho local, tratar como 10.6.
+- Desabilitar wrappers perigosos onde possível (`allow_url_fopen`/`allow_url_include` Off se nada depender).
+
+**10.6 Path Traversal**
+
+- Todo caminho de arquivo montado com dado externo (download/visualização de anexo, foto, recibo, ofício, PDF; `unlink` na exclusão; `include` dinâmico do `painel.php?pagina=`): usar `basename()` + lista branca de extensão, ou resolver por ID no banco; conferir `realpath()` dentro da pasta base permitida antes de abrir/apagar.
+- Revisar `painel.php` (roteador `pagina=`), `verRecibo.php`, `iecp|coniecp/oficio/anexos/serve.php`, upload/exclusão de fotos e anexos, `move_uploaded_file` (nome gerado pelo servidor, nunca o original).
+- Teste: requisição com `../`, `..%2f`, `%2e%2e/`, caminho absoluto e byte nulo retorna 400/403 em cada ponto.
+- Já feito (2026-10-09 ~20h, commit 40caf083): varredura de `readfile`/`unlink`/upload sem traversal encontrado; `Fotos/serve.php` (alerta Snyk) com `basename`+`realpath`. Falta: `include` dinâmico, `file_get_contents`/`fopen` locais e geração de PDF com caminho de imagem vindo de dado.
+
 ## 4. Testes (portão pré-deploy)
 
 Adicionar a `tests/Unit/Estatico/` (rodam no `gate.php --fast`):
@@ -553,3 +597,4 @@ Achados fora do escopo (não corrigidos): `coniecp/qdm/js/validarConsultaQdm.js:
 - Limpeza: órfãos `meus-dados/js/alterarSenha.js`, `meus-dados/js/mudarSenhaAntiga.js`, `meus-dados/verificaSenha.php`; fotos com CPF no nome (`scripts/lgpd/renomear_fotos.php`).
 - SMTP: mover senha para `config/smtp.php` → trocar a senha no cPanel → limpar histórico do git (`git filter-repo`).
 - Fases 5–9 conforme acima.
+- Fase 10 (recomendação do usuário, 2026-10-09): zerar Server Error Message, DOM XSS sem quebrar telas, e todas as ocorrências de SQLi, XSS, SSRF e Path Traversal.
